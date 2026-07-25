@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ショートステイ連絡帳</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- PDF作成に使うライブラリ本体を直接読み込む
+     （html2pdf.jsの自動改ページ機能は不具合が多いため使わず、
+     html2canvasとjsPDFを自分で組み合わせてPDFを作っている） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- 記録・利用者/担当職員リストを全端末で共有するためのFirestore（Firebase） -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --main:#ff9466;
@@ -24,6 +31,7 @@
     background:var(--bg);
     color:var(--text);
     padding-bottom:40px;
+    overflow-x:hidden;
   }
   header{
     background:linear-gradient(135deg,var(--main),var(--main-dark));
@@ -102,6 +110,9 @@
   }
   select, input[type=text], input[type=date], input[type=time], input[type=number], textarea{
     width:100%;
+    max-width:100%;
+    min-width:0;
+    box-sizing:border-box;
     padding:10px 12px;
     border:1px solid var(--border);
     border-radius:10px;
@@ -109,6 +120,13 @@
     font-family:inherit;
     background:#fffaf5;
     color:var(--text);
+  }
+  /* iOSのSafariはdate/timeのネイティブ入力欄が幅100%を無視して
+     はみ出すことがあるため、追加で明示的に幅を抑える */
+  input[type=date], input[type=time]{
+    -webkit-appearance:none;
+    appearance:none;
+    display:block;
   }
   textarea{
     resize:vertical;
@@ -141,6 +159,22 @@
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:10px;
+  }
+  .chk-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--text);
+    cursor:pointer;
+  }
+  .chk-row input[type=checkbox]{
+    width:18px;
+    height:18px;
+    accent-color:var(--main);
+    cursor:pointer;
+    flex-shrink:0;
   }
   .field-block{
     padding:12px;
@@ -331,10 +365,12 @@
   .entry-btn-row{
     display:flex;
     gap:8px;
+    flex-wrap:wrap;
     margin-top:12px;
   }
   .del-btn{
     flex:1;
+    min-width:80px;
     padding:11px;
     border-radius:10px;
     border:1.5px solid var(--sub);
@@ -346,6 +382,7 @@
   }
   .pdf-btn{
     flex:1;
+    min-width:80px;
     padding:11px;
     border-radius:10px;
     border:1.5px solid var(--main-dark);
@@ -355,11 +392,46 @@
     font-size:13px;
     cursor:pointer;
   }
+  .edit-btn{
+    flex:1;
+    min-width:80px;
+    padding:11px;
+    border-radius:10px;
+    border:none;
+    background:var(--main);
+    color:#fff;
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+  }
   .empty-msg{
     text-align:center;
     color:var(--text-light);
     padding:40px 10px;
     font-size:13px;
+  }
+  .edit-banner{
+    background:#fff4e9;
+    border:1.5px solid var(--main);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+  }
+  .edit-banner-text{
+    font-size:13px;
+    font-weight:700;
+    color:var(--main-dark);
+  }
+  .edit-banner button{
+    flex-shrink:0;
+    border:none;
+    background:none;
+    color:var(--text-light);
+    font-size:12px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
   }
   .hidden{ display:none !important; }
 
@@ -408,55 +480,55 @@
   #pdfTemplate .pdf-header{
     background:linear-gradient(135deg,var(--main),var(--main-dark));
     color:#fff;
-    padding:30px 40px 26px;
+    padding:44px 40px 40px;
   }
   #pdfTemplate .pdf-eyebrow{
-    font-size:12px;
-    letter-spacing:4px;
+    font-size:13px;
+    letter-spacing:5px;
     opacity:.85;
-    margin-bottom:6px;
+    margin-bottom:8px;
   }
   #pdfTemplate .pdf-title{
-    font-size:26px;
+    font-size:30px;
     font-weight:700;
   }
   #pdfTemplate .pdf-date-badge{
     display:inline-block;
-    margin-top:12px;
+    margin-top:18px;
     background:rgba(255,255,255,.25);
-    padding:6px 16px;
+    padding:8px 18px;
     border-radius:999px;
-    font-size:13px;
+    font-size:14px;
     font-weight:600;
   }
   #pdfTemplate .pdf-body{
-    padding:30px 40px 8px;
+    padding:40px 40px 8px;
   }
   #pdfTemplate .pdf-profile{
     display:flex;
-    gap:14px;
-    margin-bottom:8px;
+    gap:16px;
+    margin-bottom:30px;
   }
   #pdfTemplate .pdf-stat{
     flex:1;
     background:#fdf6ee;
     border-radius:12px;
-    padding:14px 16px;
+    padding:22px 18px;
   }
   #pdfTemplate .pdf-stat .k{
     font-size:12px;
     color:#a8886f;
     font-weight:700;
-    margin-bottom:5px;
+    margin-bottom:8px;
   }
   #pdfTemplate .pdf-stat .v{
-    font-size:19px;
+    font-size:23px;
     font-weight:700;
     color:#3a3532;
   }
   #pdfTemplate .pdf-section{
-    margin-top:22px;
-    padding-bottom:22px;
+    margin-top:36px;
+    padding-bottom:34px;
     border-bottom:1px solid #f0e6da;
   }
   #pdfTemplate .pdf-section:last-child{
@@ -464,26 +536,26 @@
     padding-bottom:0;
   }
   #pdfTemplate .pdf-section-title{
-    font-size:15px;
+    font-size:16px;
     font-weight:700;
     color:var(--main-dark);
-    margin-bottom:12px;
+    margin-bottom:16px;
   }
   #pdfTemplate .pdf-label{
     font-size:12px;
     color:#a8886f;
     font-weight:700;
-    margin-bottom:6px;
+    margin-bottom:8px;
   }
   #pdfTemplate .pdf-badges{
     display:flex;
-    gap:8px;
-    margin-bottom:14px;
+    gap:10px;
+    margin-bottom:18px;
   }
   #pdfTemplate .pdf-badge{
-    padding:6px 16px;
+    padding:8px 18px;
     border-radius:999px;
-    font-size:13px;
+    font-size:14px;
     font-weight:700;
     background:#f4efe9;
     color:#b3a291;
@@ -493,11 +565,11 @@
     color:#fff;
   }
   #pdfTemplate .pdf-text{
-    font-size:14px;
-    line-height:1.8;
+    font-size:15px;
+    line-height:2;
     color:#4a433d;
     white-space:pre-wrap;
-    margin-bottom:14px;
+    margin-bottom:18px;
   }
   #pdfTemplate .pdf-text:last-child{ margin-bottom:0; }
   #pdfTemplate .pdf-note{
@@ -512,10 +584,19 @@
   }
   #pdfTemplate .pdf-footer{
     background:#faf3ec;
-    padding:14px 40px;
+    padding:16px 40px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  #pdfTemplate .pdf-footer-staff{
+    font-size:16px;
+    font-weight:700;
+    color:var(--main-dark);
+  }
+  #pdfTemplate .pdf-footer-sub{
     font-size:11px;
     color:#a8886f;
-    text-align:right;
   }
 </style>
 </head>
@@ -538,6 +619,11 @@
 
   <!-- ===== 入力画面 ===== -->
   <div id="staffView">
+
+    <div id="editBanner" class="card hidden edit-banner">
+      <div class="edit-banner-text">✏️ <span id="editBannerText"></span>を編集中</div>
+      <button type="button" id="cancelEditBtn">編集をやめる</button>
+    </div>
 
     <div class="card">
       <h2>📋 基本情報</h2>
@@ -589,6 +675,27 @@
       <h2>🛁 入浴</h2>
       <label>時間</label>
       <input type="time" id="s_bathTime">
+    </div>
+
+    <div class="card">
+      <h2>💊 服薬</h2>
+      <div class="field-block">
+        <div class="ttl">服薬</div>
+        <div class="btn-group" data-group="medication">
+          <button data-val="あり">あり</button>
+          <button data-val="なし">なし</button>
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="ttl">タイミング（複数選択可）</div>
+        <div class="btn-group" data-group="medTiming" data-multi="true">
+          <button data-val="夕食後">夕食後</button>
+          <button data-val="入浴後">入浴後</button>
+          <button data-val="寝る前">寝る前</button>
+          <button data-val="起床時">起床時</button>
+          <button data-val="朝食後">朝食後</button>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -649,38 +756,41 @@
 
 <script>
 const FACILITY_NAME = "クロム";
-const STORAGE_KEY = "renrakucho_entries_v1";
-const USERS_KEY = "renrakucho_users_v1";
-const DEFAULT_USERS = ["田中 太郎","佐藤 花子","鈴木 一郎"];
-const STAFF_KEY = "renrakucho_staff_v1";
-const DEFAULT_STAFF = ["山本","佐藤","鈴木"];
 const MEAL_OPTIONS = ["完食","半分","少量"];
 const FIXED_NOTE = "引き続き様子を見ながらお預かりいたします。ご様子に変わったことがございましたら、ご連絡いたします。よろしくお願いいたします。";
 document.getElementById("fixedNoteText").textContent = FIXED_NOTE;
 
-/* ---- 名前リストの共通読み書き（利用者・担当職員で使い回す） ---- */
-function loadNameList(key, defaults){
-  const raw = localStorage.getItem(key);
-  if(raw){
-    try{
-      const list = JSON.parse(raw);
-      if(Array.isArray(list) && list.length) return list;
-    }catch(e){}
-  }
-  localStorage.setItem(key, JSON.stringify(defaults));
-  return defaults.slice();
-}
+/* ---- Firebase / Firestore：記録・利用者・担当職員リストを全端末で共有する ---- */
+const firebaseConfig = {
+  apiKey: "AIzaSyBrz3gIdmGLrMtRCblk7yNGvxCuOvWNtrY",
+  authDomain: "rennrakucho.firebaseapp.com",
+  projectId: "rennrakucho",
+  storageBucket: "rennrakucho.firebasestorage.app",
+  messagingSenderId: "861369835671",
+  appId: "1:861369835671:web:0662f1143433022e86c9d2"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 function saveUsers(list){
-  localStorage.setItem(USERS_KEY, JSON.stringify(list));
+  db.collection("meta").doc("users").set({ list }).catch(err=>{
+    console.error("利用者リストの保存に失敗しました", err);
+    showToast("利用者リストの保存に失敗しました。通信環境を確認してください。", 4000);
+  });
 }
 
 function saveStaffList(list){
-  localStorage.setItem(STAFF_KEY, JSON.stringify(list));
+  db.collection("meta").doc("staff").set({ list }).catch(err=>{
+    console.error("担当職員リストの保存に失敗しました", err);
+    showToast("担当職員リストの保存に失敗しました。通信環境を確認してください。", 4000);
+  });
 }
 
-let USERS = loadNameList(USERS_KEY, DEFAULT_USERS);
-let STAFF_LIST = loadNameList(STAFF_KEY, DEFAULT_STAFF);
+// Firestoreからの応答が届くまでは空の状態で表示し、届き次第すべての端末で
+// 同じ内容に更新される（onSnapshotによるリアルタイム同期）
+let USERS = [];
+let STAFF_LIST = [];
+let entries = [];
 
 function todayStr(){
   const d = new Date();
@@ -692,35 +802,6 @@ function reiwa(dateStr){
   const y = parseInt(dateStr.slice(0,4),10);
   return "R" + (y - 2018);
 }
-
-function loadEntries(){
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw) return JSON.parse(raw);
-  // 初期サンプルデータ
-  const sample = [
-    {
-      id: crypto.randomUUID(),
-      facility: FACILITY_NAME,
-      user:"田中 太郎",
-      staff:"山本",
-      date: todayStr(),
-      temp:"36.6",
-      menu:"カレーライス、サラダ、スープ",
-      meal:"完食", mealNote:"美味しそうに召し上がっていました。",
-      bathTime:"19:30",
-      note:"",
-      savedAt:new Date().toISOString()
-    }
-  ];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sample));
-  return sample;
-}
-
-function saveEntries(entries){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
-
-let entries = loadEntries();
 
 /* ---- タブ切替 ---- */
 const tabStaff = document.getElementById("tabStaff");
@@ -742,24 +823,41 @@ tabParent.addEventListener("click", ()=>{
   renderParentView();
 });
 
-/* ---- 選択式ボタン ---- */
+/* ---- 選択式ボタン（通常は単一選択、data-multi="true"のグループは複数選択可） ---- */
 const groupState = {};
 document.querySelectorAll(".btn-group").forEach(group=>{
   const name = group.dataset.group;
+  const isMulti = group.dataset.multi === "true";
+  if(isMulti) groupState[name] = [];
   group.querySelectorAll("button").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      group.querySelectorAll("button").forEach(b=>b.classList.remove("selected"));
-      btn.classList.add("selected");
-      groupState[name] = btn.dataset.val;
+      if(isMulti){
+        btn.classList.toggle("selected");
+        const val = btn.dataset.val;
+        const arr = groupState[name] || (groupState[name] = []);
+        const idx = arr.indexOf(val);
+        if(btn.classList.contains("selected")){
+          if(idx === -1) arr.push(val);
+        }else{
+          if(idx !== -1) arr.splice(idx, 1);
+        }
+      }else{
+        group.querySelectorAll("button").forEach(b=>b.classList.remove("selected"));
+        btn.classList.add("selected");
+        groupState[name] = btn.dataset.val;
+      }
     });
   });
 });
 
 document.getElementById("s_date").value = todayStr();
 
+/* ---- 記録一覧からの再編集 ---- */
+let editingId = null; // 編集中の記録のid（新規保存時はnull）
+
 function buildEntryFromForm(){
   return {
-    id: crypto.randomUUID(),
+    id: editingId || crypto.randomUUID(),
     facility: FACILITY_NAME,
     user: document.getElementById("s_user").value,
     staff: document.getElementById("s_staff").value || "未入力",
@@ -769,25 +867,36 @@ function buildEntryFromForm(){
     meal: groupState.meal || "未入力",
     mealNote: document.getElementById("s_mealNote").value,
     bathTime: document.getElementById("s_bathTime").value,
+    medication: groupState.medication || "未入力",
+    medTiming: (groupState.medTiming || []).slice(),
     note: document.getElementById("s_note").value,
     savedAt: new Date().toISOString()
   };
 }
 
+// Firestoreに保存する。編集中ならその記録を上書き、そうでなければ新規追加する
+// （entries配列自体はonSnapshotの通知で全端末分自動的に更新される）
+function commitEntry(entry){
+  db.collection("entries").doc(entry.id).set(entry).catch(err=>{
+    console.error("記録の保存に失敗しました", err);
+    showToast("保存に失敗しました。通信環境を確認してもう一度お試しください。", 4000);
+  });
+}
+
 /* ---- 保存 ---- */
 document.getElementById("saveBtn").addEventListener("click", ()=>{
   const entry = buildEntryFromForm();
-  entries.unshift(entry);
-  saveEntries(entries);
-  showToast("保存しました。記録一覧に追加されました。");
+  const wasEditing = !!editingId;
+  commitEntry(entry);
+  showToast(wasEditing ? "記録を更新しました。" : "保存しました。記録一覧に追加されました。");
   resetForm();
 });
 
 /* ---- 保存してPDF作成 ---- */
 document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
   const entry = buildEntryFromForm();
-  entries.unshift(entry);
-  saveEntries(entries);
+  const wasEditing = !!editingId;
+  commitEntry(entry);
   const btn = e.currentTarget;
   btn.disabled = true;
   btn.textContent = "PDF作成中…";
@@ -795,7 +904,7 @@ document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
     btn.disabled = false;
     btn.textContent = "保存してPDF作成";
     resetForm();
-    showToast("保存してPDFを書き出しました。");
+    showToast(wasEditing ? "記録を更新してPDFを書き出しました。" : "保存してPDFを書き出しました。");
   });
 });
 
@@ -808,7 +917,50 @@ function resetForm(){
   document.getElementById("s_bathTime").value = "";
   document.getElementById("s_date").value = todayStr();
   document.getElementById("s_note").value = "";
+  editingId = null;
+  document.getElementById("editBanner").classList.add("hidden");
 }
+
+// 選択式ボタン（単一・複数どちらも）の選択状態を、指定した値に合わせて復元する
+function setGroupSelection(name, values){
+  const group = document.querySelector(`.btn-group[data-group="${name}"]`);
+  if(!group) return;
+  const isMulti = group.dataset.multi === "true";
+  group.querySelectorAll("button").forEach(b=>{
+    b.classList.toggle("selected", values.includes(b.dataset.val));
+  });
+  groupState[name] = isMulti ? values.slice() : (values[0] || undefined);
+}
+
+// 記録一覧の「編集」ボタンから呼ばれる：フォームに既存の記録を読み込んで入力画面に切り替える
+function startEditEntry(entry){
+  editingId = entry.id;
+
+  renderUserSelects(entry.user);
+  renderStaffSelect(entry.staff);
+  document.getElementById("s_date").value = entry.date || todayStr();
+  document.getElementById("s_temp").value = (entry.temp && entry.temp !== "-") ? entry.temp : "";
+  document.getElementById("s_menu").value = entry.menu || "";
+  document.getElementById("s_mealNote").value = entry.mealNote || "";
+  document.getElementById("s_bathTime").value = entry.bathTime || "";
+  document.getElementById("s_note").value = entry.note || "";
+
+  setGroupSelection("meal", entry.meal && entry.meal !== "未入力" ? [entry.meal] : []);
+  setGroupSelection("medication", entry.medication && entry.medication !== "未入力" ? [entry.medication] : []);
+  setGroupSelection("medTiming", entry.medTiming || []);
+
+  document.getElementById("editBannerText").textContent = `${entry.user}さん（${formatDate(entry.date)}）`;
+  document.getElementById("editBanner").classList.remove("hidden");
+
+  tabStaff.click();
+  window.scrollTo(0, 0);
+  showToast("記録を読み込みました。内容を直して保存してください。");
+}
+
+document.getElementById("cancelEditBtn").addEventListener("click", ()=>{
+  resetForm();
+  showToast("編集をやめました");
+});
 
 function showToast(msg, duration){
   const t = document.getElementById("toast");
@@ -1103,7 +1255,7 @@ document.querySelectorAll(".ai-undo-btn").forEach(btn=>{
 pUserSelect.addEventListener("change", renderParentView);
 
 function renderParentView(){
-  entries = loadEntries();
+  // entries はFirestoreのonSnapshotで常に最新の状態に保たれている
   const user = pUserSelect.value || USERS[0];
   const list = entries.filter(e=>e.user===user).sort((a,b)=> b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
   const container = document.getElementById("entryList");
@@ -1124,12 +1276,15 @@ function renderParentView(){
         <span class="tag">体温：${e.temp}℃</span>
         <span class="tag">夕食：${e.meal}</span>
         <span class="tag">入浴：${e.bathTime || "未記入"}</span>
+        <span class="tag">服薬：${e.medication || "未入力"}</span>
         <span class="tag">担当：${e.staff || "未入力"}</span>
       </div>
       ${e.menu ? `<div class="note-box"><b>夕食の献立</b><br>${escapeHtml(e.menu)}</div>` : ""}
       ${e.mealNote ? `<div class="note-box"><b>食事中の様子</b><br>${escapeHtml(e.mealNote)}</div>` : ""}
+      ${e.medication==="あり" ? `<div class="note-box"><b>服薬タイミング</b><br>${e.medTiming && e.medTiming.length ? escapeHtml(e.medTiming.join("、")) : "（未選択）"}</div>` : ""}
       <div class="note-box"><b>スタッフからひとこと</b><br>${e.note ? escapeHtml(e.note) + "<br><br>" : ""}${escapeHtml(FIXED_NOTE)}</div>
       <div class="entry-btn-row">
+        <button class="edit-btn" data-edit="${e.id}">編集</button>
         <button class="pdf-btn" data-pdf="${e.id}">PDFをダウンロード</button>
         <button class="del-btn" data-del="${e.id}">削除</button>
       </div>
@@ -1137,13 +1292,22 @@ function renderParentView(){
     container.appendChild(card);
   });
 
+  container.querySelectorAll(".edit-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.dataset.edit;
+      const entry = entries.find(e=>e.id===id);
+      if(entry) startEditEntry(entry);
+    });
+  });
+
   container.querySelectorAll(".del-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const id = btn.dataset.del;
       if(btn.dataset.confirming === "1"){
-        entries = entries.filter(e=> e.id!==id);
-        saveEntries(entries);
-        renderParentView();
+        db.collection("entries").doc(id).delete().catch(err=>{
+          console.error("削除に失敗しました", err);
+          showToast("削除に失敗しました。通信環境を確認してください。", 4000);
+        });
         return;
       }
       btn.dataset.confirming = "1";
@@ -1183,13 +1347,20 @@ function escapeHtml(str){
   return (str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
 }
 
-/* ---- PDF出力：テンプレートの見た目を清書して生成 ---- */
-function buildPdfHtml(e){
+/* ---- PDF出力：テンプレートの見た目を清書して生成 ----
+   1ページ目（服薬まで）と2ページ目（スタッフからひとこと）は別々のHTMLとして
+   組み立て、それぞれ個別にhtml2canvasでキャプチャしてjsPDFに1ページずつ
+   貼り付ける（html2pdf.jsの自動改ページ/pagebreak機能は、余白の挟まり方や
+   横幅のスケーリングでたびたび不具合が出たため使わない） */
+function buildPdfPage1Html(e){
   const d = new Date(e.date+"T00:00:00");
   const days = ["日","月","火","水","木","金","土"];
   const dateLabel = `${reiwa(e.date)}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
   const mealBadges = MEAL_OPTIONS.map(o=>
     `<span class="pdf-badge${o===e.meal ? " active" : ""}">${o}</span>`
+  ).join("");
+  const medBadges = ["あり","なし"].map(o=>
+    `<span class="pdf-badge${o===e.medication ? " active" : ""}">${o}</span>`
   ).join("");
 
   return `
@@ -1198,7 +1369,7 @@ function buildPdfHtml(e){
       <div class="pdf-title">${escapeHtml(e.facility||"")}　連絡帳</div>
       <div class="pdf-date-badge">📅 ${dateLabel}</div>
     </div>
-    <div class="pdf-body">
+    <div class="pdf-body" style="padding-bottom:40px;">
       <div class="pdf-profile">
         <div class="pdf-stat">
           <div class="k">🧒 お名前</div>
@@ -1225,66 +1396,128 @@ function buildPdfHtml(e){
         <div class="pdf-text">🕐 ${escapeHtml(e.bathTime)||"未記入"}</div>
       </div>
 
-      <div class="pdf-section">
+      <div class="pdf-section" style="border-bottom:none; padding-bottom:0;">
+        <div class="pdf-section-title">💊 服薬</div>
+        <div class="pdf-label">服薬</div>
+        <div class="pdf-badges">${medBadges}</div>
+        ${e.medication==="あり" ? `
+        <div class="pdf-label">タイミング</div>
+        <div class="pdf-text">${e.medTiming && e.medTiming.length ? escapeHtml(e.medTiming.join("、")) : "（未選択）"}</div>
+        ` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function buildPdfPage2Html(e){
+  return `
+    <div class="pdf-body" style="padding-top:40px; padding-bottom:8px;">
+      <div class="pdf-section" style="margin-top:0; border-bottom:none; padding-bottom:0;">
         <div class="pdf-section-title">💬 スタッフからひとこと</div>
         <div class="pdf-note">${e.note ? escapeHtml(e.note) + "<br><br>" : ""}${escapeHtml(FIXED_NOTE)}</div>
       </div>
     </div>
-    <div class="pdf-footer">記録者：${escapeHtml(e.staff)||"未入力"}　|　ショートステイ　${escapeHtml(e.facility||"")}　連絡帳</div>
+    <div class="pdf-footer">
+      <span class="pdf-footer-staff">👤 担当者：${escapeHtml(e.staff)||"未入力"}</span>
+      <span class="pdf-footer-sub">ショートステイ　${escapeHtml(e.facility||"")}　連絡帳</span>
+    </div>
   `;
 }
 
-function exportPdf(entry){
-  return new Promise((resolve)=>{
-    const overlay = document.getElementById("pdfOverlay");
-    const el = document.getElementById("pdfTemplate");
-    el.innerHTML = buildPdfHtml(entry);
-    overlay.classList.add("show");
-    overlay.scrollTop = 0;
+// html2pdf.jsの自動改ページ(pagebreakオプション)は、marginとの組み合わせで
+// 空白ページが挟まったり、ページ幅いっぱいに画像が広がらず右側に空白が
+// できたりと、何度も不具合が出た。そのため2ページ分は自前でキャプチャし、
+// jsPDFに1ページずつ「必ずページ幅いっぱい」に貼り付ける方式に変更する。
+async function exportPdf(entry){
+  const overlay = document.getElementById("pdfOverlay");
+  const el = document.getElementById("pdfTemplate");
 
-    // 入力フォームをスクロールした状態で保存ボタンを押すと、
-    // html2canvasが#pdfOverlay(position:fixed)の座標をそのスクロール量だけ
-    // ズレて計算してしまい、内容が上に空白/下が切れる不具合があったため
-    // ページを一番上に戻してからキャプチャする
-    window.scrollTo(0, 0);
+  overlay.classList.add("show");
+  overlay.scrollTop = 0;
 
-    // オーバーレイが実際に描画されるのを待ってからキャプチャする
-    // (表示直後だとhtml2canvasがレイアウト確定前の状態を読んでしまうことがある)
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        const filename = `連絡帳_${entry.user}_${entry.date}.pdf`;
-        const opt = {
-          margin: 10,
-          filename: filename,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-            scrollX: 0,
-            scrollY: 0
-            // ページのスクロール位置に影響されないよう明示的に0を指定
-            // width/windowWidthは指定しない：指定するとhtml2canvasが
-            // 要素の実際の高さ(scrollHeight)ではなく既定の高さでキャプチャしてしまい、
-            // 下の方の内容が丸ごと切れてしまうため（実際に発生した不具合）
-          },
-          jsPDF: { unit: "pt", format: "a4", orientation: "portrait" }
-          // pagebreakのmodeに"avoid-all"を指定すると、内容が長い時に
-          // ページ計算がおかしくなり後半が丸ごと消えることがあったため外した
-        };
-        html2pdf().set(opt).from(el).save()
-          .catch((err)=>{
-            console.error("PDF生成に失敗しました", err);
-            showToast("PDFの作成に失敗しました。もう一度お試しください。");
-          })
-          .finally(()=>{
-            overlay.classList.remove("show");
-            resolve();
-          });
-      });
-    });
-  });
+  // 入力フォームをスクロールした状態で保存ボタンを押すと、
+  // html2canvasが座標をそのスクロール量だけズレて計算してしまう不具合が
+  // あったため、ページを一番上に戻してからキャプチャする
+  window.scrollTo(0, 0);
+
+  // オーバーレイが実際に描画されるのを待ってからキャプチャする
+  await new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+  try{
+    const canvasOpt = {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      scrollX: 0,
+      scrollY: 0
+    };
+
+    el.innerHTML = buildPdfPage1Html(entry);
+    const canvas1 = await html2canvas(el, canvasOpt);
+
+    el.innerHTML = buildPdfPage2Html(entry);
+    const canvas2 = await html2canvas(el, canvasOpt);
+
+    // jspdf.umd.min.jsを読み込むと window.jspdf.jsPDF としてコンストラクタが使える
+    const JsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    const pdf = new JsPDFCtor({ unit: "pt", format: "a4", orientation: "portrait" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+
+    addCanvasAsPdfPage(pdf, canvas1, pageW, pageH, false);
+    addCanvasAsPdfPage(pdf, canvas2, pageW, pageH, true);
+
+    pdf.save(`連絡帳_${entry.user}_${entry.date}.pdf`);
+  }catch(err){
+    console.error("PDF生成に失敗しました", err);
+    showToast("PDFの作成に失敗しました。もう一度お試しください。");
+  }finally{
+    overlay.classList.remove("show");
+  }
 }
+
+// キャプチャしたcanvasを「必ずページ幅いっぱい」になるようスケールしてPDFの
+// 1ページとして貼り付ける（右側に空白ができないようにするため、常に
+// pageW=画像の幅として計算する）
+function addCanvasAsPdfPage(pdf, canvas, pageW, pageH, addNewPage){
+  if(addNewPage) pdf.addPage();
+  const imgW = pageW;
+  const imgH = canvas.height * imgW / canvas.width;
+  const h = Math.min(imgH, pageH);
+  const imgData = canvas.toDataURL("image/jpeg", 0.98);
+  pdf.addImage(imgData, "JPEG", 0, 0, imgW, h);
+}
+
+/* ---- Firestoreのリアルタイム同期：他の端末での変更もここで自動的に反映される ---- */
+
+// 記録一覧（entries）
+db.collection("entries").onSnapshot(snapshot=>{
+  entries = snapshot.docs.map(doc=>doc.data());
+  renderParentView();
+}, err=>{
+  console.error("記録の読み込みに失敗しました", err);
+  showToast("記録の読み込みに失敗しました。通信環境を確認してください。", 4000);
+});
+
+// 利用者リスト
+db.collection("meta").doc("users").onSnapshot(doc=>{
+  USERS = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+  renderUserSelects();
+  if(!userManagePanel.classList.contains("hidden")) renderUserManageList();
+}, err=>{
+  console.error("利用者リストの読み込みに失敗しました", err);
+  showToast("利用者リストの読み込みに失敗しました。通信環境を確認してください。", 4000);
+});
+
+// 担当職員リスト
+db.collection("meta").doc("staff").onSnapshot(doc=>{
+  STAFF_LIST = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+  renderStaffSelect();
+  if(!staffManagePanel.classList.contains("hidden")) renderStaffManageList();
+}, err=>{
+  console.error("担当職員リストの読み込みに失敗しました", err);
+  showToast("担当職員リストの読み込みに失敗しました。通信環境を確認してください。", 4000);
+});
 </script>
 
 </body>
