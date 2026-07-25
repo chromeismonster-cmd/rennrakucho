@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ショートステイ連絡帳</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root{
+    --main:#ff9466;
+    --main-dark:#e77a4a;
+    --sub:#6ea8b8;
+    --bg:#fbf7f2;
+    --card:#ffffff;
+    --text:#3a3532;
+    --text-light:#8a8078;
+    --border:#ecdfd3;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding-bottom:40px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--main),var(--main-dark));
+    color:#fff;
+    padding:18px 20px;
+    position:sticky;
+    top:0;
+    z-index:10;
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+  }
+  header .top-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  header h1{
+    margin:0;
+    font-size:18px;
+    font-weight:700;
+  }
+  header .sub{
+    font-size:12px;
+    opacity:.9;
+    margin-top:2px;
+  }
+  .switch{
+    display:flex;
+    background:rgba(255,255,255,.25);
+    border-radius:999px;
+    padding:3px;
+    gap:2px;
+  }
+  .switch button{
+    border:none;
+    background:transparent;
+    color:#fff;
+    padding:7px 14px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    opacity:.75;
+  }
+  .switch button.active{
+    background:#fff;
+    color:var(--main-dark);
+    opacity:1;
+  }
+  main{
+    max-width:560px;
+    margin:0 auto;
+    padding:16px;
+  }
+  .card{
+    background:var(--card);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:14px;
+    box-shadow:0 1px 4px rgba(0,0,0,.05);
+    border:1px solid var(--border);
+  }
+  .card h2{
+    font-size:15px;
+    margin:0 0 12px;
+    color:var(--main-dark);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    margin:10px 0 6px;
+    color:var(--text);
+  }
+  select, input[type=text], input[type=date], input[type=time], input[type=number], textarea{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fffaf5;
+    color:var(--text);
+  }
+  textarea{
+    resize:vertical;
+    min-height:60px;
+  }
+  .btn-group{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .btn-group button{
+    flex:1;
+    min-width:70px;
+    padding:10px 6px;
+    border:1px solid var(--border);
+    background:#fffaf5;
+    border-radius:10px;
+    font-size:13px;
+    cursor:pointer;
+    color:var(--text);
+    transition:.15s;
+  }
+  .btn-group button.selected{
+    background:var(--main);
+    color:#fff;
+    border-color:var(--main);
+    font-weight:700;
+  }
+  .row2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .field-block{
+    padding:12px;
+    background:#fdf6ee;
+    border-radius:12px;
+    margin-bottom:10px;
+  }
+  .field-block .ttl{
+    font-size:13px;
+    font-weight:700;
+    margin-bottom:8px;
+    color:var(--main-dark);
+  }
+  .unit-input{
+    position:relative;
+  }
+  .unit-input input{
+    padding-right:40px;
+  }
+  .unit-input .unit-suffix{
+    position:absolute;
+    right:14px;
+    top:50%;
+    transform:translateY(-50%);
+    color:var(--text-light);
+    font-size:14px;
+    font-weight:600;
+    pointer-events:none;
+  }
+  .ai-proof-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:8px;
+  }
+  .ai-proof-btn{
+    border:1.5px solid var(--sub);
+    background:#fff;
+    color:var(--sub);
+    font-weight:700;
+    font-size:12px;
+    padding:7px 14px;
+    border-radius:999px;
+    cursor:pointer;
+  }
+  .ai-proof-btn:disabled{
+    opacity:.6;
+  }
+  .ai-undo-btn{
+    border:none;
+    background:none;
+    color:var(--text-light);
+    font-size:12px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+  .fixed-note-preview{
+    margin-top:12px;
+    background:#fdf6ee;
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+  .fixed-note-preview-label{
+    font-size:11px;
+    font-weight:700;
+    color:var(--main-dark);
+    margin-bottom:6px;
+  }
+  .fixed-note-preview #fixedNoteText{
+    font-size:12px;
+    line-height:1.7;
+    color:var(--text-light);
+  }
+  .user-row{
+    display:flex;
+    gap:6px;
+    margin-bottom:6px;
+  }
+  .user-row input{
+    flex:1;
+    padding:8px 10px;
+    font-size:13px;
+  }
+  .user-row button{
+    border:none;
+    background:#fbe6e0;
+    color:#b74a2c;
+    width:34px;
+    border-radius:8px;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .save-bar{
+    position:sticky;
+    bottom:0;
+    background:linear-gradient(0deg,var(--bg) 60%,transparent);
+    padding:14px 0 6px;
+    display:flex;
+    gap:8px;
+  }
+  .save-btn{
+    flex:1;
+    padding:15px;
+    background:var(--main);
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    box-shadow:0 4px 10px rgba(255,148,102,.4);
+  }
+  .save-btn.pdf{
+    background:var(--sub);
+    box-shadow:0 4px 10px rgba(110,168,184,.4);
+  }
+  .save-btn:active{ transform:scale(.98); }
+  .save-btn:disabled{ opacity:.6; }
+  .toast{
+    position:fixed;
+    top:80px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#7cb37c;
+    color:#fff;
+    padding:10px 20px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+    box-shadow:0 4px 10px rgba(0,0,0,.15);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .3s, top .3s;
+    z-index:50;
+  }
+  .toast.show{
+    opacity:1;
+    top:100px;
+  }
+
+  /* 記録一覧画面 */
+  .user-select-bar{
+    margin-bottom:14px;
+  }
+  .entry-card{
+    background:var(--card);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:12px;
+    border:1px solid var(--border);
+    box-shadow:0 1px 4px rgba(0,0,0,.05);
+  }
+  .entry-card .date{
+    font-size:13px;
+    color:var(--text-light);
+    font-weight:600;
+  }
+  .entry-card .headline{
+    font-size:15px;
+    font-weight:700;
+    margin:4px 0 10px;
+  }
+  .tag-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:10px;
+  }
+  .tag{
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:999px;
+    background:#fdf1e7;
+    color:var(--main-dark);
+    font-weight:600;
+  }
+  .note-box{
+    background:#f7f2ec;
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:13px;
+    line-height:1.6;
+    margin-top:8px;
+    white-space:pre-wrap;
+  }
+  .entry-btn-row{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+  }
+  .del-btn{
+    flex:1;
+    padding:11px;
+    border-radius:10px;
+    border:1.5px solid var(--sub);
+    background:#fff;
+    color:var(--sub);
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .pdf-btn{
+    flex:1;
+    padding:11px;
+    border-radius:10px;
+    border:1.5px solid var(--main-dark);
+    background:#fff;
+    color:var(--main-dark);
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .empty-msg{
+    text-align:center;
+    color:var(--text-light);
+    padding:40px 10px;
+    font-size:13px;
+  }
+  .hidden{ display:none !important; }
+
+  /* ===== PDF生成用オーバーレイ ===== */
+  /* html2canvasはposition:fixedの要素(や、その内側の要素)を正しく
+     キャプチャできないことがあるため、position:fixedは使わず、
+     ページ先頭にスクロールした上でposition:absoluteで全面表示する */
+  #pdfOverlay{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    min-height:100vh;
+    background:rgba(58,53,50,.55);
+    z-index:999;
+    display:none;
+    align-items:flex-start;
+    justify-content:center;
+    padding:32px 12px;
+  }
+  #pdfOverlay.show{ display:flex; }
+  #pdfOverlay .pdf-generating-label{
+    position:absolute;
+    top:16px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#fff;
+    color:var(--main-dark);
+    font-size:13px;
+    font-weight:700;
+    padding:8px 16px;
+    border-radius:999px;
+    box-shadow:0 2px 8px rgba(0,0,0,.2);
+  }
+  #pdfTemplate{
+    /* max-width:100%は付けない：スマホ幅に合わせて縮むとPDF化した時に
+       おかしなサイズ・改ページになるため、常に700pxで確定させる */
+    width:700px;
+    flex-shrink:0;
+    background:#fff;
+    color:#3a3532;
+    border-radius:16px;
+    overflow:hidden;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  }
+  #pdfTemplate .pdf-header{
+    background:linear-gradient(135deg,var(--main),var(--main-dark));
+    color:#fff;
+    padding:30px 40px 26px;
+  }
+  #pdfTemplate .pdf-eyebrow{
+    font-size:12px;
+    letter-spacing:4px;
+    opacity:.85;
+    margin-bottom:6px;
+  }
+  #pdfTemplate .pdf-title{
+    font-size:26px;
+    font-weight:700;
+  }
+  #pdfTemplate .pdf-date-badge{
+    display:inline-block;
+    margin-top:12px;
+    background:rgba(255,255,255,.25);
+    padding:6px 16px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+  }
+  #pdfTemplate .pdf-body{
+    padding:30px 40px 8px;
+  }
+  #pdfTemplate .pdf-profile{
+    display:flex;
+    gap:14px;
+    margin-bottom:8px;
+  }
+  #pdfTemplate .pdf-stat{
+    flex:1;
+    background:#fdf6ee;
+    border-radius:12px;
+    padding:14px 16px;
+  }
+  #pdfTemplate .pdf-stat .k{
+    font-size:12px;
+    color:#a8886f;
+    font-weight:700;
+    margin-bottom:5px;
+  }
+  #pdfTemplate .pdf-stat .v{
+    font-size:19px;
+    font-weight:700;
+    color:#3a3532;
+  }
+  #pdfTemplate .pdf-section{
+    margin-top:22px;
+    padding-bottom:22px;
+    border-bottom:1px solid #f0e6da;
+  }
+  #pdfTemplate .pdf-section:last-child{
+    border-bottom:none;
+    padding-bottom:0;
+  }
+  #pdfTemplate .pdf-section-title{
+    font-size:15px;
+    font-weight:700;
+    color:var(--main-dark);
+    margin-bottom:12px;
+  }
+  #pdfTemplate .pdf-label{
+    font-size:12px;
+    color:#a8886f;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  #pdfTemplate .pdf-badges{
+    display:flex;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  #pdfTemplate .pdf-badge{
+    padding:6px 16px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:700;
+    background:#f4efe9;
+    color:#b3a291;
+  }
+  #pdfTemplate .pdf-badge.active{
+    background:var(--main);
+    color:#fff;
+  }
+  #pdfTemplate .pdf-text{
+    font-size:14px;
+    line-height:1.8;
+    color:#4a433d;
+    white-space:pre-wrap;
+    margin-bottom:14px;
+  }
+  #pdfTemplate .pdf-text:last-child{ margin-bottom:0; }
+  #pdfTemplate .pdf-note{
+    background:#fff8f0;
+    border-left:4px solid var(--main);
+    border-radius:0 10px 10px 0;
+    padding:16px 18px;
+    font-size:14px;
+    line-height:1.9;
+    color:#4a433d;
+    white-space:pre-wrap;
+  }
+  #pdfTemplate .pdf-footer{
+    background:#faf3ec;
+    padding:14px 40px;
+    font-size:11px;
+    color:#a8886f;
+    text-align:right;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top-row">
+    <div>
+      <h1 id="headerTitle">ショートステイ クロム</h1>
+      <div class="sub">連絡帳作成ツール（プロトタイプ）</div>
+    </div>
+    <div class="switch">
+      <button id="tabStaff" class="active">入力</button>
+      <button id="tabParent">記録一覧</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===== 入力画面 ===== -->
+  <div id="staffView">
+
+    <div class="card">
+      <h2>📋 基本情報</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="margin:10px 0 6px;">お名前</label>
+        <button type="button" id="toggleUserManage" style="border:none; background:none; color:var(--main-dark); font-size:12px; font-weight:700; cursor:pointer; padding:0;">利用者を編集</button>
+      </div>
+      <select id="s_user"></select>
+
+      <div id="userManagePanel" class="hidden field-block" style="margin-top:10px;">
+        <div class="ttl">利用者リストの編集</div>
+        <div id="userManageList"></div>
+        <div class="user-row">
+          <input type="text" id="newUserInput" placeholder="新しい利用者名を入力">
+          <button type="button" id="addUserRowBtn" style="width:auto; padding:0 14px; background:var(--main); color:#fff; font-weight:700;">追加</button>
+        </div>
+      </div>
+
+      <label>利用日</label>
+      <input type="date" id="s_date">
+      <label>体温（来所時）</label>
+      <div class="unit-input">
+        <input type="number" id="s_temp" step="0.1">
+        <span class="unit-suffix">℃</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🍽️ 夕食</h2>
+      <label>献立</label>
+      <textarea id="s_menu" placeholder="例：カレーライス、サラダ、スープ"></textarea>
+      <div class="field-block">
+        <div class="ttl">摂取量</div>
+        <div class="btn-group" data-group="meal">
+          <button data-val="完食">完食</button>
+          <button data-val="半分">半分</button>
+          <button data-val="少量">少量</button>
+        </div>
+      </div>
+      <label>食事中の様子</label>
+      <textarea id="s_mealNote" placeholder="例：美味しそうに召し上がっていました"></textarea>
+      <div class="ai-proof-row">
+        <button type="button" class="ai-proof-btn" data-target="s_mealNote">✨ AIで添削する</button>
+        <button type="button" class="ai-undo-btn hidden" data-target="s_mealNote">元に戻す</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🛁 入浴</h2>
+      <label>時間</label>
+      <input type="time" id="s_bathTime">
+    </div>
+
+    <div class="card">
+      <h2>💬 スタッフからひとこと</h2>
+      <label style="margin-top:0;">個別に伝えたいこと（任意）</label>
+      <textarea id="s_note" placeholder="例：今日は少し咳がありました等、その日だけ伝えたいことがあれば入力"></textarea>
+      <div class="ai-proof-row">
+        <button type="button" class="ai-proof-btn" data-target="s_note">✨ AIで添削する</button>
+        <button type="button" class="ai-undo-btn hidden" data-target="s_note">元に戻す</button>
+      </div>
+      <div class="fixed-note-preview">
+        <div class="fixed-note-preview-label">📌 下記の定型文はPDF作成時に自動で追加されます（編集不要）</div>
+        <div id="fixedNoteText"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="margin:0 0 6px;">担当職員</label>
+        <button type="button" id="toggleStaffManage" style="border:none; background:none; color:var(--main-dark); font-size:12px; font-weight:700; cursor:pointer; padding:0;">担当職員を編集</button>
+      </div>
+      <select id="s_staff"></select>
+
+      <div id="staffManagePanel" class="hidden field-block" style="margin-top:10px;">
+        <div class="ttl">担当職員リストの編集</div>
+        <div id="staffManageList"></div>
+        <div class="user-row">
+          <input type="text" id="newStaffInput" placeholder="新しい担当職員名を入力">
+          <button type="button" id="addStaffRowBtn" style="width:auto; padding:0 14px; background:var(--main); color:#fff; font-weight:700;">追加</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <button class="save-btn" id="saveBtn">保存する</button>
+      <button class="save-btn pdf" id="savePdfBtn">保存してPDF作成</button>
+    </div>
+  </div>
+
+  <!-- ===== 記録一覧（スタッフ用） ===== -->
+  <div id="parentView" class="hidden">
+    <div class="card user-select-bar">
+      <label style="margin-top:0">お名前で絞り込み</label>
+      <select id="p_user"></select>
+    </div>
+    <div id="entryList"></div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast">保存しました</div>
+
+<!-- PDF出力用テンプレート（生成中だけ画面に表示） -->
+<div id="pdfOverlay">
+  <div class="pdf-generating-label">PDFを作成しています…</div>
+  <div id="pdfTemplate"></div>
+</div>
+
+<script>
+const FACILITY_NAME = "クロム";
+const STORAGE_KEY = "renrakucho_entries_v1";
+const USERS_KEY = "renrakucho_users_v1";
+const DEFAULT_USERS = ["田中 太郎","佐藤 花子","鈴木 一郎"];
+const STAFF_KEY = "renrakucho_staff_v1";
+const DEFAULT_STAFF = ["山本","佐藤","鈴木"];
+const MEAL_OPTIONS = ["完食","半分","少量"];
+const FIXED_NOTE = "引き続き様子を見ながらお預かりいたします。ご様子に変わったことがございましたら、ご連絡いたします。よろしくお願いいたします。";
+document.getElementById("fixedNoteText").textContent = FIXED_NOTE;
+
+/* ---- 名前リストの共通読み書き（利用者・担当職員で使い回す） ---- */
+function loadNameList(key, defaults){
+  const raw = localStorage.getItem(key);
+  if(raw){
+    try{
+      const list = JSON.parse(raw);
+      if(Array.isArray(list) && list.length) return list;
+    }catch(e){}
+  }
+  localStorage.setItem(key, JSON.stringify(defaults));
+  return defaults.slice();
+}
+
+function saveUsers(list){
+  localStorage.setItem(USERS_KEY, JSON.stringify(list));
+}
+
+function saveStaffList(list){
+  localStorage.setItem(STAFF_KEY, JSON.stringify(list));
+}
+
+let USERS = loadNameList(USERS_KEY, DEFAULT_USERS);
+let STAFF_LIST = loadNameList(STAFF_KEY, DEFAULT_STAFF);
+
+function todayStr(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function reiwa(dateStr){
+  if(!dateStr) return "";
+  const y = parseInt(dateStr.slice(0,4),10);
+  return "R" + (y - 2018);
+}
+
+function loadEntries(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(raw) return JSON.parse(raw);
+  // 初期サンプルデータ
+  const sample = [
+    {
+      id: crypto.randomUUID(),
+      facility: FACILITY_NAME,
+      user:"田中 太郎",
+      staff:"山本",
+      date: todayStr(),
+      temp:"36.6",
+      menu:"カレーライス、サラダ、スープ",
+      meal:"完食", mealNote:"美味しそうに召し上がっていました。",
+      bathTime:"19:30",
+      note:"",
+      savedAt:new Date().toISOString()
+    }
+  ];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sample));
+  return sample;
+}
+
+function saveEntries(entries){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+let entries = loadEntries();
+
+/* ---- タブ切替 ---- */
+const tabStaff = document.getElementById("tabStaff");
+const tabParent = document.getElementById("tabParent");
+const staffView = document.getElementById("staffView");
+const parentView = document.getElementById("parentView");
+
+tabStaff.addEventListener("click", ()=>{
+  tabStaff.classList.add("active");
+  tabParent.classList.remove("active");
+  staffView.classList.remove("hidden");
+  parentView.classList.add("hidden");
+});
+tabParent.addEventListener("click", ()=>{
+  tabParent.classList.add("active");
+  tabStaff.classList.remove("active");
+  parentView.classList.remove("hidden");
+  staffView.classList.add("hidden");
+  renderParentView();
+});
+
+/* ---- 選択式ボタン ---- */
+const groupState = {};
+document.querySelectorAll(".btn-group").forEach(group=>{
+  const name = group.dataset.group;
+  group.querySelectorAll("button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      group.querySelectorAll("button").forEach(b=>b.classList.remove("selected"));
+      btn.classList.add("selected");
+      groupState[name] = btn.dataset.val;
+    });
+  });
+});
+
+document.getElementById("s_date").value = todayStr();
+
+function buildEntryFromForm(){
+  return {
+    id: crypto.randomUUID(),
+    facility: FACILITY_NAME,
+    user: document.getElementById("s_user").value,
+    staff: document.getElementById("s_staff").value || "未入力",
+    date: document.getElementById("s_date").value || todayStr(),
+    temp: document.getElementById("s_temp").value || "-",
+    menu: document.getElementById("s_menu").value,
+    meal: groupState.meal || "未入力",
+    mealNote: document.getElementById("s_mealNote").value,
+    bathTime: document.getElementById("s_bathTime").value,
+    note: document.getElementById("s_note").value,
+    savedAt: new Date().toISOString()
+  };
+}
+
+/* ---- 保存 ---- */
+document.getElementById("saveBtn").addEventListener("click", ()=>{
+  const entry = buildEntryFromForm();
+  entries.unshift(entry);
+  saveEntries(entries);
+  showToast("保存しました。記録一覧に追加されました。");
+  resetForm();
+});
+
+/* ---- 保存してPDF作成 ---- */
+document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
+  const entry = buildEntryFromForm();
+  entries.unshift(entry);
+  saveEntries(entries);
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "PDF作成中…";
+  exportPdf(entry).finally(()=>{
+    btn.disabled = false;
+    btn.textContent = "保存してPDF作成";
+    resetForm();
+    showToast("保存してPDFを書き出しました。");
+  });
+});
+
+function resetForm(){
+  document.querySelectorAll(".btn-group button.selected").forEach(b=>b.classList.remove("selected"));
+  for(const k in groupState) delete groupState[k];
+  document.getElementById("s_temp").value = "";
+  document.getElementById("s_menu").value = "";
+  document.getElementById("s_mealNote").value = "";
+  document.getElementById("s_bathTime").value = "";
+  document.getElementById("s_date").value = todayStr();
+  document.getElementById("s_note").value = "";
+}
+
+function showToast(msg, duration){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(()=>t.classList.remove("show"), duration || 2200);
+}
+
+/* ---- 利用者セレクト（入力画面・記録一覧の両方）を再描画 ---- */
+const sUserSelect = document.getElementById("s_user");
+const pUserSelect = document.getElementById("p_user");
+
+function renderUserSelects(keepValue){
+  [sUserSelect, pUserSelect].forEach(sel=>{
+    const prev = keepValue !== undefined ? keepValue : sel.value;
+    sel.innerHTML = "";
+    USERS.forEach(u=>{
+      const opt = document.createElement("option");
+      opt.value = u; opt.textContent = u;
+      sel.appendChild(opt);
+    });
+    if(prev && USERS.includes(prev)) sel.value = prev;
+  });
+}
+renderUserSelects();
+
+/* ---- 利用者リストの編集パネル ---- */
+const toggleUserManageBtn = document.getElementById("toggleUserManage");
+const userManagePanel = document.getElementById("userManagePanel");
+const userManageList = document.getElementById("userManageList");
+const addUserRowBtn = document.getElementById("addUserRowBtn");
+
+toggleUserManageBtn.addEventListener("click", ()=>{
+  userManagePanel.classList.toggle("hidden");
+  if(!userManagePanel.classList.contains("hidden")) renderUserManageList();
+});
+
+function renderUserManageList(){
+  userManageList.innerHTML = "";
+  USERS.forEach((name, idx)=>{
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML = `
+      <input type="text" value="${name.replace(/"/g,'&quot;')}" data-idx="${idx}">
+      <button type="button" data-del-idx="${idx}">×</button>
+    `;
+    userManageList.appendChild(row);
+  });
+
+  userManageList.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const idx = parseInt(inp.dataset.idx, 10);
+      const newName = inp.value.trim();
+      if(!newName){ inp.value = USERS[idx]; return; }
+      USERS[idx] = newName;
+      saveUsers(USERS);
+      renderUserSelects();
+    });
+  });
+
+  userManageList.querySelectorAll("button[data-del-idx]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const idx = parseInt(btn.dataset.delIdx, 10);
+      if(USERS.length <= 1){
+        showToast("利用者は最低1人必要です");
+        return;
+      }
+      const removed = USERS[idx];
+      USERS.splice(idx, 1);
+      saveUsers(USERS);
+      renderUserManageList();
+      renderUserSelects();
+      showToast(`「${removed}」を削除しました`);
+    });
+  });
+}
+
+const newUserInput = document.getElementById("newUserInput");
+
+function addNewUser(){
+  const name = (newUserInput.value || "").trim();
+  if(!name){
+    newUserInput.focus();
+    return;
+  }
+  if(USERS.includes(name)){
+    showToast("同じ名前が既にあります");
+    return;
+  }
+  USERS.push(name);
+  saveUsers(USERS);
+  newUserInput.value = "";
+  renderUserManageList();
+  renderUserSelects(name);
+  showToast(`「${name}」を追加しました`);
+}
+
+addUserRowBtn.addEventListener("click", addNewUser);
+newUserInput.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter"){
+    e.preventDefault();
+    addNewUser();
+  }
+});
+
+/* ---- 担当職員セレクト（利用者と同じ仕組み） ---- */
+const sStaffSelect = document.getElementById("s_staff");
+
+function renderStaffSelect(keepValue){
+  const prev = keepValue !== undefined ? keepValue : sStaffSelect.value;
+  sStaffSelect.innerHTML = "";
+  STAFF_LIST.forEach(u=>{
+    const opt = document.createElement("option");
+    opt.value = u; opt.textContent = u;
+    sStaffSelect.appendChild(opt);
+  });
+  if(prev && STAFF_LIST.includes(prev)) sStaffSelect.value = prev;
+}
+renderStaffSelect();
+
+/* ---- 担当職員リストの編集パネル ---- */
+const toggleStaffManageBtn = document.getElementById("toggleStaffManage");
+const staffManagePanel = document.getElementById("staffManagePanel");
+const staffManageList = document.getElementById("staffManageList");
+const addStaffRowBtn = document.getElementById("addStaffRowBtn");
+
+toggleStaffManageBtn.addEventListener("click", ()=>{
+  staffManagePanel.classList.toggle("hidden");
+  if(!staffManagePanel.classList.contains("hidden")) renderStaffManageList();
+});
+
+function renderStaffManageList(){
+  staffManageList.innerHTML = "";
+  STAFF_LIST.forEach((name, idx)=>{
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML = `
+      <input type="text" value="${name.replace(/"/g,'&quot;')}" data-idx="${idx}">
+      <button type="button" data-del-idx="${idx}">×</button>
+    `;
+    staffManageList.appendChild(row);
+  });
+
+  staffManageList.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const idx = parseInt(inp.dataset.idx, 10);
+      const newName = inp.value.trim();
+      if(!newName){ inp.value = STAFF_LIST[idx]; return; }
+      STAFF_LIST[idx] = newName;
+      saveStaffList(STAFF_LIST);
+      renderStaffSelect();
+    });
+  });
+
+  staffManageList.querySelectorAll("button[data-del-idx]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const idx = parseInt(btn.dataset.delIdx, 10);
+      if(STAFF_LIST.length <= 1){
+        showToast("担当職員は最低1人必要です");
+        return;
+      }
+      const removed = STAFF_LIST[idx];
+      STAFF_LIST.splice(idx, 1);
+      saveStaffList(STAFF_LIST);
+      renderStaffManageList();
+      renderStaffSelect();
+      showToast(`「${removed}」を削除しました`);
+    });
+  });
+}
+
+const newStaffInput = document.getElementById("newStaffInput");
+
+function addNewStaff(){
+  const name = (newStaffInput.value || "").trim();
+  if(!name){
+    newStaffInput.focus();
+    return;
+  }
+  if(STAFF_LIST.includes(name)){
+    showToast("同じ名前が既にあります");
+    return;
+  }
+  STAFF_LIST.push(name);
+  saveStaffList(STAFF_LIST);
+  newStaffInput.value = "";
+  renderStaffManageList();
+  renderStaffSelect(name);
+  showToast(`「${name}」を追加しました`);
+}
+
+addStaffRowBtn.addEventListener("click", addNewStaff);
+newStaffInput.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter"){
+    e.preventDefault();
+    addNewStaff();
+  }
+});
+
+/* ---- AI添削（Gemini API） ---- */
+// 施設共有のAPIキーを埋め込み済み。個別に設定する必要はない。
+const GEMINI_API_KEY = "AQ.Ab8RN6Joo7e9kdGbN3SVLtmtoF-BcDJXTU7VEikW6luBeVqFdg";
+
+async function proofreadWithGemini(text){
+  const key = GEMINI_API_KEY;
+
+  const prompt =
+    "あなたは日本語の文章を添削するアシスタントです。以下は介護・福祉施設のスタッフが保護者向けに書いた連絡帳の一文です。" +
+    "誤字脱字や不自然な言い回し、助詞の誤りがあれば自然な日本語に直してください。" +
+    "内容や意味、敬語の丁寧さのレベルは変えないでください。説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
+    "文章：" + text;
+
+  // "AQ."形式の新しいキーは ?key= のクエリパラメータでは弾かれることがあるため、
+  // 現在推奨されている x-goog-api-key ヘッダーで送る
+  // モデル名は固定バージョンだと廃止されるたびに直す必要が出るため、
+  // 常に最新のFlashモデルを指す "gemini-flash-latest" を使う
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": key
+    },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }]
+    })
+  });
+
+  if(!res.ok){
+    const errBody = await res.text().catch(()=> "");
+    console.error("Gemini API error", res.status, errBody);
+    throw new Error("API_ERROR_" + res.status + ": " + errBody.slice(0, 200));
+  }
+
+  const data = await res.json();
+  const result = data && data.candidates && data.candidates[0] &&
+    data.candidates[0].content && data.candidates[0].content.parts &&
+    data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+
+  if(!result) throw new Error("NO_RESULT");
+  return result.trim();
+}
+
+const originalTextBeforeProof = {}; // { textareaId: 元のテキスト }
+
+document.querySelectorAll(".ai-proof-btn").forEach(btn=>{
+  btn.addEventListener("click", async ()=>{
+    const targetId = btn.dataset.target;
+    const textarea = document.getElementById(targetId);
+    const text = textarea.value.trim();
+
+    if(!text){
+      showToast("添削する文章がありません");
+      return;
+    }
+
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "添削中…";
+
+    try{
+      const corrected = await proofreadWithGemini(text);
+      originalTextBeforeProof[targetId] = text;
+      textarea.value = corrected;
+      const undoBtn = document.querySelector(`.ai-undo-btn[data-target="${targetId}"]`);
+      if(undoBtn) undoBtn.classList.remove("hidden");
+      showToast("添削しました");
+    }catch(err){
+      console.error("添削に失敗しました", err);
+      showToast("添削に失敗：" + (err && err.message ? err.message : "不明なエラー"), 6000);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  });
+});
+
+document.querySelectorAll(".ai-undo-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const targetId = btn.dataset.target;
+    if(targetId in originalTextBeforeProof){
+      document.getElementById(targetId).value = originalTextBeforeProof[targetId];
+      delete originalTextBeforeProof[targetId];
+    }
+    btn.classList.add("hidden");
+    showToast("元に戻しました");
+  });
+});
+
+/* ---- 記録一覧（スタッフ用） ---- */
+pUserSelect.addEventListener("change", renderParentView);
+
+function renderParentView(){
+  entries = loadEntries();
+  const user = pUserSelect.value || USERS[0];
+  const list = entries.filter(e=>e.user===user).sort((a,b)=> b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
+  const container = document.getElementById("entryList");
+  container.innerHTML = "";
+
+  if(list.length===0){
+    container.innerHTML = `<div class="empty-msg">まだ記録がありません</div>`;
+    return;
+  }
+
+  list.forEach(e=>{
+    const card = document.createElement("div");
+    card.className = "entry-card";
+    card.innerHTML = `
+      <div class="date">${formatDate(e.date)}</div>
+      <div class="headline">${e.user} さんの記録</div>
+      <div class="tag-row">
+        <span class="tag">体温：${e.temp}℃</span>
+        <span class="tag">夕食：${e.meal}</span>
+        <span class="tag">入浴：${e.bathTime || "未記入"}</span>
+        <span class="tag">担当：${e.staff || "未入力"}</span>
+      </div>
+      ${e.menu ? `<div class="note-box"><b>夕食の献立</b><br>${escapeHtml(e.menu)}</div>` : ""}
+      ${e.mealNote ? `<div class="note-box"><b>食事中の様子</b><br>${escapeHtml(e.mealNote)}</div>` : ""}
+      <div class="note-box"><b>スタッフからひとこと</b><br>${e.note ? escapeHtml(e.note) + "<br><br>" : ""}${escapeHtml(FIXED_NOTE)}</div>
+      <div class="entry-btn-row">
+        <button class="pdf-btn" data-pdf="${e.id}">PDFをダウンロード</button>
+        <button class="del-btn" data-del="${e.id}">削除</button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll(".del-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.dataset.del;
+      if(btn.dataset.confirming === "1"){
+        entries = entries.filter(e=> e.id!==id);
+        saveEntries(entries);
+        renderParentView();
+        return;
+      }
+      btn.dataset.confirming = "1";
+      const original = btn.textContent;
+      btn.textContent = "本当に削除する？";
+      setTimeout(()=>{
+        if(btn.isConnected && btn.dataset.confirming === "1"){
+          btn.dataset.confirming = "0";
+          btn.textContent = original;
+        }
+      }, 3000);
+    });
+  });
+
+  container.querySelectorAll(".pdf-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.dataset.pdf;
+      const entry = entries.find(e=>e.id===id);
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = "作成中…";
+      exportPdf(entry).finally(()=>{
+        btn.disabled = false;
+        btn.textContent = original;
+      });
+    });
+  });
+}
+
+function formatDate(dstr){
+  const d = new Date(dstr+"T00:00:00");
+  const days = ["日","月","火","水","木","金","土"];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
+}
+
+function escapeHtml(str){
+  return (str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+}
+
+/* ---- PDF出力：テンプレートの見た目を清書して生成 ---- */
+function buildPdfHtml(e){
+  const d = new Date(e.date+"T00:00:00");
+  const days = ["日","月","火","水","木","金","土"];
+  const dateLabel = `${reiwa(e.date)}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
+  const mealBadges = MEAL_OPTIONS.map(o=>
+    `<span class="pdf-badge${o===e.meal ? " active" : ""}">${o}</span>`
+  ).join("");
+
+  return `
+    <div class="pdf-header">
+      <div class="pdf-eyebrow">SHORT STAY</div>
+      <div class="pdf-title">${escapeHtml(e.facility||"")}　連絡帳</div>
+      <div class="pdf-date-badge">📅 ${dateLabel}</div>
+    </div>
+    <div class="pdf-body">
+      <div class="pdf-profile">
+        <div class="pdf-stat">
+          <div class="k">🧒 お名前</div>
+          <div class="v">${escapeHtml(e.user)}</div>
+        </div>
+        <div class="pdf-stat">
+          <div class="k">🌡️ 体温（来所時）</div>
+          <div class="v">${escapeHtml(e.temp)}℃</div>
+        </div>
+      </div>
+
+      <div class="pdf-section">
+        <div class="pdf-section-title">🍽️ 夕食</div>
+        <div class="pdf-label">献立</div>
+        <div class="pdf-text">${escapeHtml(e.menu)||"（記入なし）"}</div>
+        <div class="pdf-label">摂取量</div>
+        <div class="pdf-badges">${mealBadges}</div>
+        <div class="pdf-label">食事中の様子</div>
+        <div class="pdf-text">${escapeHtml(e.mealNote)||"（記入なし）"}</div>
+      </div>
+
+      <div class="pdf-section">
+        <div class="pdf-section-title">🛁 入浴</div>
+        <div class="pdf-text">🕐 ${escapeHtml(e.bathTime)||"未記入"}</div>
+      </div>
+
+      <div class="pdf-section">
+        <div class="pdf-section-title">💬 スタッフからひとこと</div>
+        <div class="pdf-note">${e.note ? escapeHtml(e.note) + "<br><br>" : ""}${escapeHtml(FIXED_NOTE)}</div>
+      </div>
+    </div>
+    <div class="pdf-footer">記録者：${escapeHtml(e.staff)||"未入力"}　|　ショートステイ　${escapeHtml(e.facility||"")}　連絡帳</div>
+  `;
+}
+
+function exportPdf(entry){
+  return new Promise((resolve)=>{
+    const overlay = document.getElementById("pdfOverlay");
+    const el = document.getElementById("pdfTemplate");
+    el.innerHTML = buildPdfHtml(entry);
+    overlay.classList.add("show");
+    overlay.scrollTop = 0;
+
+    // 入力フォームをスクロールした状態で保存ボタンを押すと、
+    // html2canvasが#pdfOverlay(position:fixed)の座標をそのスクロール量だけ
+    // ズレて計算してしまい、内容が上に空白/下が切れる不具合があったため
+    // ページを一番上に戻してからキャプチャする
+    window.scrollTo(0, 0);
+
+    // オーバーレイが実際に描画されるのを待ってからキャプチャする
+    // (表示直後だとhtml2canvasがレイアウト確定前の状態を読んでしまうことがある)
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        const filename = `連絡帳_${entry.user}_${entry.date}.pdf`;
+        const opt = {
+          margin: 10,
+          filename: filename,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            scrollX: 0,
+            scrollY: 0
+            // ページのスクロール位置に影響されないよう明示的に0を指定
+            // width/windowWidthは指定しない：指定するとhtml2canvasが
+            // 要素の実際の高さ(scrollHeight)ではなく既定の高さでキャプチャしてしまい、
+            // 下の方の内容が丸ごと切れてしまうため（実際に発生した不具合）
+          },
+          jsPDF: { unit: "pt", format: "a4", orientation: "portrait" }
+          // pagebreakのmodeに"avoid-all"を指定すると、内容が長い時に
+          // ページ計算がおかしくなり後半が丸ごと消えることがあったため外した
+        };
+        html2pdf().set(opt).from(el).save()
+          .catch((err)=>{
+            console.error("PDF生成に失敗しました", err);
+            showToast("PDFの作成に失敗しました。もう一度お試しください。");
+          })
+          .finally(()=>{
+            overlay.classList.remove("show");
+            resolve();
+          });
+      });
+    });
+  });
+}
+</script>
+
+</body>
+</html>
