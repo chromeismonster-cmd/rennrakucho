@@ -480,6 +480,58 @@
     border-radius:999px;
     box-shadow:0 2px 8px rgba(0,0,0,.2);
   }
+  /* できあがったPDFをその場で表示する画面 */
+  #pdfViewerOverlay{
+    position:fixed;
+    inset:0;
+    background:#2b2723;
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+  }
+  #pdfViewerOverlay.hidden{ display:none; }
+  .pdf-viewer-bar{
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 14px;
+    background:#3a3532;
+    box-shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+  .pdf-viewer-bar span{
+    flex:1;
+    color:#fff;
+    font-size:13px;
+    font-weight:600;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .pdf-viewer-bar a, .pdf-viewer-bar button{
+    flex-shrink:0;
+    border:none;
+    border-radius:999px;
+    padding:9px 16px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    text-decoration:none;
+  }
+  .pdf-viewer-bar a{
+    background:var(--main);
+    color:#fff;
+  }
+  .pdf-viewer-bar button{
+    background:rgba(255,255,255,.15);
+    color:#fff;
+  }
+  #pdfViewerFrame{
+    flex:1;
+    width:100%;
+    border:none;
+    background:#fff;
+  }
   #pdfTemplate{
     /* max-width:100%は付けない：スマホ幅に合わせて縮むとPDF化した時に
        おかしなサイズ・改ページになるため、常に700pxで確定させる */
@@ -769,6 +821,17 @@
   <div id="pdfTemplate"></div>
 </div>
 
+<!-- できあがったPDFをその場で表示する画面（iOS Safariはタブ間でファイルを
+     受け渡すのが不安定なため、新しいタブを開かずこの中で直接見せる） -->
+<div id="pdfViewerOverlay" class="hidden">
+  <div class="pdf-viewer-bar">
+    <span id="pdfViewerName"></span>
+    <a id="pdfViewerDownload" href="#" download="連絡帳.pdf">ダウンロード</a>
+    <button type="button" id="pdfViewerClose">閉じる</button>
+  </div>
+  <iframe id="pdfViewerFrame" title="PDFプレビュー"></iframe>
+</div>
+
 <script>
 const FACILITY_NAME = "クロム";
 const MEAL_OPTIONS = ["完食","半分","少量"];
@@ -963,12 +1026,7 @@ document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
   const btn = e.currentTarget;
   btn.disabled = true;
   btn.textContent = "PDF作成中…";
-  // iOS Safariは、タップ操作から時間が経ってから発生したダウンロードを
-  // 「ユーザー操作によるものではない」と判断してブロックすることがあるため、
-  // タップした瞬間（非同期処理が始まる前）に空のタブを開いておき、
-  // PDFができ次第そこに読み込ませることでブロックを回避する
-  const previewTab = openPreviewTab();
-  exportPdf(entry, previewTab).finally(()=>{
+  exportPdf(entry).finally(()=>{
     btn.disabled = false;
     btn.textContent = "保存してPDF作成";
     resetForm();
@@ -1413,8 +1471,7 @@ function renderParentView(){
       btn.disabled = true;
       const original = btn.textContent;
       btn.textContent = "作成中…";
-      const previewTab = openPreviewTab();
-      exportPdf(entry, previewTab).finally(()=>{
+      exportPdf(entry).finally(()=>{
         btn.disabled = false;
         btn.textContent = original;
       });
@@ -1509,24 +1566,16 @@ function buildPdfPage2Html(e){
   `;
 }
 
-// タップした直後・非同期処理が始まる前に空のタブを開いておく関数。
-// iOS Safariは、ユーザーの操作から離れたタイミングで発生した画面遷移や
-// ダウンロードを「ユーザー操作によるものではない」と判断してブロックする
-// ことがあるため、html2canvasの処理などで時間がかかる前に先にタブを
-// 確保しておき、あとからそこにPDFを読み込ませる
-function openPreviewTab(){
-  try{
-    return window.open("", "_blank");
-  }catch(e){
-    return null;
-  }
-}
-
 // html2pdf.jsの自動改ページ(pagebreakオプション)は、marginとの組み合わせで
 // 空白ページが挟まったり、ページ幅いっぱいに画像が広がらず右側に空白が
 // できたりと、何度も不具合が出た。そのため2ページ分は自前でキャプチャし、
 // jsPDFに1ページずつ「必ずページ幅いっぱい」に貼り付ける方式に変更する。
-async function exportPdf(entry, previewTab){
+//
+// 完成したPDFは新しいタブでは開かない：iOS Safariは新しいタブに
+// blob:/data: URLを渡してもabout:blankのままになったり、タップから時間が
+// 経った処理はダウンロードごとブロックしたりすることがあったため、
+// 同じ画面の中に全画面のプレビュー(iframe)を出す方式にした。
+async function exportPdf(entry){
   const overlay = document.getElementById("pdfOverlay");
   const el = document.getElementById("pdfTemplate");
 
@@ -1575,26 +1624,45 @@ async function exportPdf(entry, previewTab){
     pdf.addImage(canvas2.toDataURL("image/jpeg", 0.98), "JPEG", 0, 0, pageW, imgH2);
 
     const filename = `連絡帳_${entry.user}_${entry.date}.pdf`;
-
-    if(previewTab && !previewTab.closed){
-      // 事前に開いておいたタブにPDFを読み込ませる（iOS Safari向け）。
-      // blob: URLは作成した元のタブでしか読み込めず、別タブ(previewTab)に
-      // 渡すとabout:blankのままになる不具合があったため、
-      // どのタブからでも読み込めるdata: URI（base64埋め込み）を使う
-      const dataUri = pdf.output("datauristring");
-      previewTab.location.href = dataUri;
-    }else{
-      // ポップアップが使えなかった場合は従来通りダウンロードを試みる
-      pdf.save(filename);
-    }
+    const blobUrl = URL.createObjectURL(pdf.output("blob"));
+    showPdfInViewer(blobUrl, filename);
   }catch(err){
     console.error("PDF生成に失敗しました", err);
     showToast("PDFの作成に失敗しました。もう一度お試しください。", 4000);
-    if(previewTab && !previewTab.closed) previewTab.close();
   }finally{
     overlay.classList.remove("show");
   }
 }
+
+/* ---- できあがったPDFをその場で表示する（新しいタブは開かない） ---- */
+const pdfViewerOverlay = document.getElementById("pdfViewerOverlay");
+const pdfViewerFrame = document.getElementById("pdfViewerFrame");
+const pdfViewerName = document.getElementById("pdfViewerName");
+const pdfViewerDownload = document.getElementById("pdfViewerDownload");
+let currentPdfBlobUrl = null;
+
+function showPdfInViewer(blobUrl, filename){
+  // 前回分のURLが残っていたら解放しておく
+  if(currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
+  currentPdfBlobUrl = blobUrl;
+
+  pdfViewerFrame.src = blobUrl;
+  pdfViewerName.textContent = filename;
+  pdfViewerDownload.href = blobUrl;
+  pdfViewerDownload.setAttribute("download", filename);
+  pdfViewerOverlay.classList.remove("hidden");
+}
+
+function closePdfViewer(){
+  pdfViewerOverlay.classList.add("hidden");
+  pdfViewerFrame.src = "about:blank";
+  if(currentPdfBlobUrl){
+    URL.revokeObjectURL(currentPdfBlobUrl);
+    currentPdfBlobUrl = null;
+  }
+}
+
+document.getElementById("pdfViewerClose").addEventListener("click", closePdfViewer);
 
 /* ---- Firestoreのリアルタイム同期：他の端末での変更もここで自動的に反映される ---- */
 
