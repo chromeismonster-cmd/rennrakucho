@@ -883,8 +883,55 @@ function commitEntry(entry){
   });
 }
 
+// 保存前の必須項目チェック。未入力があればエラーを出して保存を止める
+// （「スタッフからひとこと」の個別コメント欄だけは画面上も(任意)表記なので対象外）
+function validateForm(){
+  if(!document.getElementById("s_user").value){
+    showToast("お名前が未入力です。選択してください。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_date").value){
+    showToast("利用日が未入力です。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_temp").value){
+    showToast("体温が未入力です。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_menu").value.trim()){
+    showToast("夕食の献立が未入力です。", 3000);
+    return false;
+  }
+  if(!groupState.meal){
+    showToast("摂取量が未選択です。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_mealNote").value.trim()){
+    showToast("食事中の様子が未入力です。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_bathTime").value){
+    showToast("入浴の時間が未入力です。", 3000);
+    return false;
+  }
+  if(!groupState.medication){
+    showToast("服薬の有無が未選択です。", 3000);
+    return false;
+  }
+  if(groupState.medication === "あり" && (!groupState.medTiming || !groupState.medTiming.length)){
+    showToast("服薬のタイミングが未選択です。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_staff").value){
+    showToast("担当職員が未入力です。選択してください。", 3000);
+    return false;
+  }
+  return true;
+}
+
 /* ---- 保存 ---- */
 document.getElementById("saveBtn").addEventListener("click", ()=>{
+  if(!validateForm()) return;
   const entry = buildEntryFromForm();
   const wasEditing = !!editingId;
   commitEntry(entry);
@@ -894,6 +941,7 @@ document.getElementById("saveBtn").addEventListener("click", ()=>{
 
 /* ---- 保存してPDF作成 ---- */
 document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
+  if(!validateForm()) return;
   const entry = buildEntryFromForm();
   const wasEditing = !!editingId;
   commitEntry(entry);
@@ -917,6 +965,10 @@ function resetForm(){
   document.getElementById("s_bathTime").value = "";
   document.getElementById("s_date").value = todayStr();
   document.getElementById("s_note").value = "";
+  // お名前・担当職員も選び直してもらうため空に戻す
+  // （選択肢にない値を入れるとどのoptionも選択されていない状態になる）
+  document.getElementById("s_user").value = "__cleared__";
+  document.getElementById("s_staff").value = "__cleared__";
   editingId = null;
   document.getElementById("editBanner").classList.add("hidden");
 }
@@ -1458,14 +1510,23 @@ async function exportPdf(entry){
     el.innerHTML = buildPdfPage2Html(entry);
     const canvas2 = await html2canvas(el, canvasOpt);
 
+    // A4サイズ（pt）を基準の幅・最低の高さとして使う。文章がたくさん入力されて
+    // 1ページ分より内容が長くなった場合は、文字を縮めたり切ったりせず、
+    // そのページ自体をその分だけ縦に伸ばして全部入りきるようにする
+    const pageW = 595.28;
+    const minPageH = 841.89;
+    const imgH1 = canvas1.height * pageW / canvas1.width;
+    const imgH2 = canvas2.height * pageW / canvas2.width;
+    const pageH1 = Math.max(imgH1, minPageH);
+    const pageH2 = Math.max(imgH2, minPageH);
+
     // jspdf.umd.min.jsを読み込むと window.jspdf.jsPDF としてコンストラクタが使える
     const JsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-    const pdf = new JsPDFCtor({ unit: "pt", format: "a4", orientation: "portrait" });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
+    const pdf = new JsPDFCtor({ unit: "pt", format: [pageW, pageH1], orientation: "portrait" });
+    pdf.addImage(canvas1.toDataURL("image/jpeg", 0.98), "JPEG", 0, 0, pageW, imgH1);
 
-    addCanvasAsPdfPage(pdf, canvas1, pageW, pageH, false);
-    addCanvasAsPdfPage(pdf, canvas2, pageW, pageH, true);
+    pdf.addPage([pageW, pageH2]);
+    pdf.addImage(canvas2.toDataURL("image/jpeg", 0.98), "JPEG", 0, 0, pageW, imgH2);
 
     pdf.save(`連絡帳_${entry.user}_${entry.date}.pdf`);
   }catch(err){
@@ -1474,18 +1535,6 @@ async function exportPdf(entry){
   }finally{
     overlay.classList.remove("show");
   }
-}
-
-// キャプチャしたcanvasを「必ずページ幅いっぱい」になるようスケールしてPDFの
-// 1ページとして貼り付ける（右側に空白ができないようにするため、常に
-// pageW=画像の幅として計算する）
-function addCanvasAsPdfPage(pdf, canvas, pageW, pageH, addNewPage){
-  if(addNewPage) pdf.addPage();
-  const imgW = pageW;
-  const imgH = canvas.height * imgW / canvas.width;
-  const h = Math.min(imgH, pageH);
-  const imgData = canvas.toDataURL("image/jpeg", 0.98);
-  pdf.addImage(imgData, "JPEG", 0, 0, imgW, h);
 }
 
 /* ---- Firestoreのリアルタイム同期：他の端末での変更もここで自動的に反映される ---- */
