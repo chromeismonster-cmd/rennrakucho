@@ -766,8 +766,8 @@
 
     <div class="card">
       <h2>💬 スタッフからひとこと</h2>
-      <label style="margin-top:0;">個別に伝えたいこと（任意）</label>
-      <textarea id="s_note" placeholder="例：今日は少し咳がありました等、その日だけ伝えたいことがあれば入力"></textarea>
+      <label style="margin-top:0;">個別に伝えたいこと</label>
+      <textarea id="s_note" placeholder="例：今日は少し咳がありました等、その日の様子を入力"></textarea>
       <div class="ai-proof-row">
         <button type="button" class="ai-proof-btn" data-target="s_note">✨ AIで添削する</button>
         <button type="button" class="ai-undo-btn hidden" data-target="s_note">元に戻す</button>
@@ -962,7 +962,6 @@ function commitEntry(entry){
 }
 
 // 保存前の必須項目チェック。未入力があればエラーを出して保存を止める
-// （「スタッフからひとこと」の個別コメント欄だけは画面上も(任意)表記なので対象外）
 function validateForm(){
   if(!document.getElementById("s_user").value){
     showToast("お名前が未入力です。選択してください。", 3000);
@@ -1002,6 +1001,10 @@ function validateForm(){
   }
   if(!document.getElementById("s_staff").value){
     showToast("担当職員が未入力です。選択してください。", 3000);
+    return false;
+  }
+  if(!document.getElementById("s_note").value.trim()){
+    showToast("スタッフからひとことが未入力です。", 3000);
     return false;
   }
   return true;
@@ -1311,9 +1314,10 @@ async function proofreadWithGemini(text){
   const key = GEMINI_API_KEY;
 
   const prompt =
-    "あなたは日本語の文章を添削するアシスタントです。以下は介護・福祉施設のスタッフが保護者向けに書いた連絡帳の一文です。" +
-    "誤字脱字や不自然な言い回し、助詞の誤りがあれば自然な日本語に直してください。" +
-    "内容や意味、敬語の丁寧さのレベルは変えないでください。説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
+    "あなたは日本語の文章を添削するプロの校正者です。以下は介護・福祉施設のスタッフが保護者向けに書いた連絡帳の一文です。" +
+    "誤字脱字、不自然な言い回し、助詞の誤り、句読点の不自然さ（読点の抜け・打ちすぎ・位置がおかしい、句点の抜けなど）を、" +
+    "違和感なく読めるレベルまでしっかり直してください。多少表現を整える程度に留めず、気になる箇所は積極的に修正してください。" +
+    "ただし内容や意味、敬語の丁寧さのレベルは変えないでください。説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
     "文章：" + text;
 
   // "AQ."形式の新しいキーは ?key= のクエリパラメータでは弾かれることがあるため、
@@ -1646,7 +1650,10 @@ function showPdfInViewer(blobUrl, filename){
   if(currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
   currentPdfBlobUrl = blobUrl;
 
-  pdfViewerFrame.src = blobUrl;
+  // "#view=FitH" を付けないと、iframe内のPDFビューアが実寸(100%)表示になり、
+  // スマホ幅からはみ出て右側が切れてしまうことがあるため、
+  // 横幅に合わせて縮小表示されるよう明示的に指定する
+  pdfViewerFrame.src = blobUrl + "#view=FitH";
   pdfViewerName.textContent = filename;
   pdfViewerDownload.href = blobUrl;
   pdfViewerDownload.setAttribute("download", filename);
