@@ -1577,9 +1577,12 @@ async function exportPdf(entry, previewTab){
     const filename = `連絡帳_${entry.user}_${entry.date}.pdf`;
 
     if(previewTab && !previewTab.closed){
-      // 事前に開いておいたタブにPDFを読み込ませる（iOS Safari向け）
-      const blobUrl = URL.createObjectURL(pdf.output("blob"));
-      previewTab.location.href = blobUrl;
+      // 事前に開いておいたタブにPDFを読み込ませる（iOS Safari向け）。
+      // blob: URLは作成した元のタブでしか読み込めず、別タブ(previewTab)に
+      // 渡すとabout:blankのままになる不具合があったため、
+      // どのタブからでも読み込めるdata: URI（base64埋め込み）を使う
+      const dataUri = pdf.output("datauristring");
+      previewTab.location.href = dataUri;
     }else{
       // ポップアップが使えなかった場合は従来通りダウンロードを試みる
       pdf.save(filename);
