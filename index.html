@@ -295,6 +295,18 @@
   }
   .save-btn:active{ transform:scale(.98); }
   .save-btn:disabled{ opacity:.6; }
+  .clear-btn{
+    flex:0 0 64px;
+    padding:15px 6px;
+    background:#fff;
+    border:1.5px solid var(--text-light);
+    color:var(--text-light);
+    border-radius:12px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .clear-btn:active{ transform:scale(.98); }
   .toast{
     position:fixed;
     top:80px;
@@ -730,6 +742,7 @@
     </div>
 
     <div class="save-bar">
+      <button type="button" class="clear-btn" id="clearFormBtn">クリア</button>
       <button class="save-btn" id="saveBtn">保存する</button>
       <button class="save-btn pdf" id="savePdfBtn">保存してPDF作成</button>
     </div>
@@ -954,6 +967,26 @@ document.getElementById("savePdfBtn").addEventListener("click", (e)=>{
     resetForm();
     showToast(wasEditing ? "記録を更新してPDFを書き出しました。" : "保存してPDFを書き出しました。");
   });
+});
+
+/* ---- クリア（保存せずに入力内容を全部消す。誤タップ防止で2回押し） ---- */
+const clearFormBtn = document.getElementById("clearFormBtn");
+clearFormBtn.addEventListener("click", ()=>{
+  if(clearFormBtn.dataset.confirming === "1"){
+    resetForm();
+    showToast("入力をクリアしました");
+    clearFormBtn.dataset.confirming = "0";
+    clearFormBtn.textContent = "クリア";
+    return;
+  }
+  clearFormBtn.dataset.confirming = "1";
+  clearFormBtn.textContent = "確認";
+  setTimeout(()=>{
+    if(clearFormBtn.dataset.confirming === "1"){
+      clearFormBtn.dataset.confirming = "0";
+      clearFormBtn.textContent = "クリア";
+    }
+  }, 3000);
 });
 
 function resetForm(){
