@@ -739,6 +739,13 @@
 
     <div class="card">
       <h2>🛁 入浴</h2>
+      <div class="field-block">
+        <div class="ttl">入浴</div>
+        <div class="btn-group" data-group="bath">
+          <button data-val="あり">あり</button>
+          <button data-val="なし">なし</button>
+        </div>
+      </div>
       <label>時間</label>
       <input type="time" id="s_bathTime">
     </div>
@@ -944,7 +951,8 @@ function buildEntryFromForm(){
     menu: document.getElementById("s_menu").value,
     meal: groupState.meal || "未入力",
     mealNote: document.getElementById("s_mealNote").value,
-    bathTime: document.getElementById("s_bathTime").value,
+    bath: groupState.bath || "未入力",
+    bathTime: groupState.bath === "なし" ? "" : document.getElementById("s_bathTime").value,
     medication: groupState.medication || "未入力",
     medTiming: (groupState.medTiming || []).slice(),
     note: document.getElementById("s_note").value,
@@ -987,7 +995,11 @@ function validateForm(){
     showToast("食事中の様子が未入力です。", 3000);
     return false;
   }
-  if(!document.getElementById("s_bathTime").value){
+  if(!groupState.bath){
+    showToast("入浴の有無が未選択です。", 3000);
+    return false;
+  }
+  if(groupState.bath === "あり" && !document.getElementById("s_bathTime").value){
     showToast("入浴の時間が未入力です。", 3000);
     return false;
   }
@@ -1099,6 +1111,7 @@ function startEditEntry(entry){
   document.getElementById("s_note").value = entry.note || "";
 
   setGroupSelection("meal", entry.meal && entry.meal !== "未入力" ? [entry.meal] : []);
+  setGroupSelection("bath", entry.bath && entry.bath !== "未入力" ? [entry.bath] : []);
   setGroupSelection("medication", entry.medication && entry.medication !== "未入力" ? [entry.medication] : []);
   setGroupSelection("medTiming", entry.medTiming || []);
 
@@ -1315,9 +1328,13 @@ async function proofreadWithGemini(text){
 
   const prompt =
     "あなたは日本語の文章を添削するプロの校正者です。以下は介護・福祉施設のスタッフが保護者向けに書いた連絡帳の一文です。" +
-    "誤字脱字、不自然な言い回し、助詞の誤り、句読点の不自然さ（読点の抜け・打ちすぎ・位置がおかしい、句点の抜けなど）を、" +
-    "違和感なく読めるレベルまでしっかり直してください。多少表現を整える程度に留めず、気になる箇所は積極的に修正してください。" +
-    "ただし内容や意味、敬語の丁寧さのレベルは変えないでください。説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
+    "次の観点でしっかり添削してください。\n" +
+    "1. 誤字脱字、不自然な言い回し、助詞の誤り、句読点の不自然さ（読点の抜け・打ちすぎ・位置がおかしい、句点の抜けなど）を、違和感なく読めるレベルまで直す。\n" +
+    "2. 変換ミスなどで、文脈から見て明らかに意図と違う言葉になっている箇所（例：「このようなことが内容」→「このようなことがないよう」）は、文脈から本来伝えたかった内容を読み取り、正しい表現に直す。\n" +
+    "3. 文章の内容を文脈から理解した上で、保護者への連絡として表現がふさわしくない場合（きつい言い方、不安を過度に煽る表現、施設側の愚痴・不満、その他不適切な内容など）は、伝えたい事実や趣旨は保ったまま、保護者向けの連絡としてふさわしい表現に直す。\n" +
+    "多少表現を整える程度に留めず、気になる箇所は積極的に修正してください。" +
+    "ただし、スタッフが伝えようとしている事実そのもの（誰が何をした、体調がどうだったか等）までは書き換えず、敬語の丁寧さのレベルも保ってください。" +
+    "説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
     "文章：" + text;
 
   // "AQ."形式の新しいキーは ?key= のクエリパラメータでは弾かれることがあるため、
@@ -1339,7 +1356,10 @@ async function proofreadWithGemini(text){
   if(!res.ok){
     const errBody = await res.text().catch(()=> "");
     console.error("Gemini API error", res.status, errBody);
-    throw new Error("API_ERROR_" + res.status + ": " + errBody.slice(0, 200));
+    // 詳細（英語のJSON等）はコンソールにだけ出し、画面には日本語の短いメッセージを出す
+    const apiErr = new Error("API_ERROR_" + res.status);
+    apiErr.status = res.status;
+    throw apiErr;
   }
 
   const data = await res.json();
@@ -1377,7 +1397,17 @@ document.querySelectorAll(".ai-proof-btn").forEach(btn=>{
       showToast("添削しました");
     }catch(err){
       console.error("添削に失敗しました", err);
-      showToast("添削に失敗：" + (err && err.message ? err.message : "不明なエラー"), 6000);
+      let msg;
+      if(err && err.status === 429){
+        msg = "AIの利用回数が今日の上限に達しました。少し時間をおくか、日付が変わってからもう一度お試しください。";
+      }else if(err && (err.status === 401 || err.status === 403)){
+        msg = "AI添削が利用できません（認証エラー）。管理者にご連絡ください。";
+      }else if(err && err.message === "NO_RESULT"){
+        msg = "AIから結果を取得できませんでした。もう一度お試しください。";
+      }else{
+        msg = "添削に失敗しました。通信環境を確認してもう一度お試しください。";
+      }
+      showToast(msg, 6000);
     }finally{
       btn.disabled = false;
       btn.textContent = originalLabel;
@@ -1421,7 +1451,7 @@ function renderParentView(){
       <div class="tag-row">
         <span class="tag">体温：${e.temp}℃</span>
         <span class="tag">夕食：${e.meal}</span>
-        <span class="tag">入浴：${e.bathTime || "未記入"}</span>
+        <span class="tag">入浴：${e.bath === "なし" ? "なし" : (e.bathTime || (e.bath ? "未記入" : "未入力"))}</span>
         <span class="tag">服薬：${e.medication || "未入力"}</span>
         <span class="tag">担当：${e.staff || "未入力"}</span>
       </div>
@@ -1539,7 +1569,7 @@ function buildPdfPage1Html(e){
 
       <div class="pdf-section">
         <div class="pdf-section-title">🛁 入浴</div>
-        <div class="pdf-text">🕐 ${escapeHtml(e.bathTime)||"未記入"}</div>
+        <div class="pdf-text">${e.bath === "なし" ? "なし" : "🕐 " + (escapeHtml(e.bathTime)||"未記入")}</div>
       </div>
 
       <div class="pdf-section" style="border-bottom:none; padding-bottom:0;">
