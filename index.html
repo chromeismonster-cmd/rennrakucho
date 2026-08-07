@@ -157,6 +157,11 @@
     border-color:var(--main);
     font-weight:700;
   }
+  .btn-group.disabled button{
+    pointer-events:none;
+    opacity:.4;
+    background:#f2f2f2;
+  }
   .row2{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -751,7 +756,7 @@
     </div>
 
     <div class="card">
-      <h2>💊 服薬</h2>
+      <h2>💊 服薬・塗布</h2>
       <div class="field-block">
         <div class="ttl">服薬</div>
         <div class="btn-group" data-group="medication">
@@ -760,8 +765,25 @@
         </div>
       </div>
       <div class="field-block">
-        <div class="ttl">タイミング（複数選択可）</div>
+        <div class="ttl">服薬タイミング（複数選択可）</div>
         <div class="btn-group" data-group="medTiming" data-multi="true">
+          <button data-val="夕食後">夕食後</button>
+          <button data-val="入浴後">入浴後</button>
+          <button data-val="寝る前">寝る前</button>
+          <button data-val="起床時">起床時</button>
+          <button data-val="朝食後">朝食後</button>
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="ttl">塗布</div>
+        <div class="btn-group" data-group="topical">
+          <button data-val="あり">あり</button>
+          <button data-val="なし">なし</button>
+        </div>
+      </div>
+      <div class="field-block">
+        <div class="ttl">塗布タイミング（複数選択可）</div>
+        <div class="btn-group" data-group="topicalTiming" data-multi="true">
           <button data-val="夕食後">夕食後</button>
           <button data-val="入浴後">入浴後</button>
           <button data-val="寝る前">寝る前</button>
@@ -931,9 +953,30 @@ document.querySelectorAll(".btn-group").forEach(group=>{
         btn.classList.add("selected");
         groupState[name] = btn.dataset.val;
       }
+      if(name === "medication") updateMedTimingAvailability();
+      if(name === "topical") updateTopicalTimingAvailability();
     });
   });
 });
+
+// 「あり／なし」の項目が「なし」（または未選択）の間は、対応するタイミングのボタンを選べないようにする
+// （服薬・塗布のどちらも同じ仕組みを使い回す）
+function makeTimingAvailabilityUpdater(mainGroupName, timingGroupName){
+  const timingGroup = document.querySelector(`.btn-group[data-group="${timingGroupName}"]`);
+  return function(){
+    if(!timingGroup) return;
+    const enabled = groupState[mainGroupName] === "あり";
+    timingGroup.classList.toggle("disabled", !enabled);
+    if(!enabled){
+      timingGroup.querySelectorAll("button.selected").forEach(b=>b.classList.remove("selected"));
+      groupState[timingGroupName] = [];
+    }
+  };
+}
+const updateMedTimingAvailability = makeTimingAvailabilityUpdater("medication", "medTiming");
+const updateTopicalTimingAvailability = makeTimingAvailabilityUpdater("topical", "topicalTiming");
+updateMedTimingAvailability();
+updateTopicalTimingAvailability();
 
 document.getElementById("s_date").value = todayStr();
 
@@ -955,6 +998,8 @@ function buildEntryFromForm(){
     bathTime: groupState.bath === "なし" ? "" : document.getElementById("s_bathTime").value,
     medication: groupState.medication || "未入力",
     medTiming: (groupState.medTiming || []).slice(),
+    topical: groupState.topical || "未入力",
+    topicalTiming: (groupState.topicalTiming || []).slice(),
     note: document.getElementById("s_note").value,
     savedAt: new Date().toISOString()
   };
@@ -1009,6 +1054,14 @@ function validateForm(){
   }
   if(groupState.medication === "あり" && (!groupState.medTiming || !groupState.medTiming.length)){
     showToast("服薬のタイミングが未選択です。", 3000);
+    return false;
+  }
+  if(!groupState.topical){
+    showToast("塗布の有無が未選択です。", 3000);
+    return false;
+  }
+  if(groupState.topical === "あり" && (!groupState.topicalTiming || !groupState.topicalTiming.length)){
+    showToast("塗布のタイミングが未選択です。", 3000);
     return false;
   }
   if(!document.getElementById("s_staff").value){
@@ -1084,6 +1137,8 @@ function resetForm(){
   document.getElementById("s_staff").value = "__cleared__";
   editingId = null;
   document.getElementById("editBanner").classList.add("hidden");
+  updateMedTimingAvailability();
+  updateTopicalTimingAvailability();
 }
 
 // 選択式ボタン（単一・複数どちらも）の選択状態を、指定した値に合わせて復元する
@@ -1113,7 +1168,11 @@ function startEditEntry(entry){
   setGroupSelection("meal", entry.meal && entry.meal !== "未入力" ? [entry.meal] : []);
   setGroupSelection("bath", entry.bath && entry.bath !== "未入力" ? [entry.bath] : []);
   setGroupSelection("medication", entry.medication && entry.medication !== "未入力" ? [entry.medication] : []);
-  setGroupSelection("medTiming", entry.medTiming || []);
+  updateMedTimingAvailability();
+  setGroupSelection("medTiming", entry.medication === "あり" ? (entry.medTiming || []) : []);
+  setGroupSelection("topical", entry.topical && entry.topical !== "未入力" ? [entry.topical] : []);
+  updateTopicalTimingAvailability();
+  setGroupSelection("topicalTiming", entry.topical === "あり" ? (entry.topicalTiming || []) : []);
 
   document.getElementById("editBannerText").textContent = `${entry.user}さん（${formatDate(entry.date)}）`;
   document.getElementById("editBanner").classList.remove("hidden");
@@ -1332,8 +1391,10 @@ async function proofreadWithGemini(text){
     "1. 誤字脱字、不自然な言い回し、助詞の誤り、句読点の不自然さ（読点の抜け・打ちすぎ・位置がおかしい、句点の抜けなど）を、違和感なく読めるレベルまで直す。\n" +
     "2. 変換ミスなどで、文脈から見て明らかに意図と違う言葉になっている箇所（例：「このようなことが内容」→「このようなことがないよう」）は、文脈から本来伝えたかった内容を読み取り、正しい表現に直す。\n" +
     "3. 文章の内容を文脈から理解した上で、保護者への連絡として表現がふさわしくない場合（きつい言い方、不安を過度に煽る表現、施設側の愚痴・不満、その他不適切な内容など）は、伝えたい事実や趣旨は保ったまま、保護者向けの連絡としてふさわしい表現に直す。\n" +
-    "多少表現を整える程度に留めず、気になる箇所は積極的に修正してください。" +
-    "ただし、スタッフが伝えようとしている事実そのもの（誰が何をした、体調がどうだったか等）までは書き換えず、敬語の丁寧さのレベルも保ってください。" +
+    "誤字脱字や上記の問題箇所は気になる箇所を積極的に修正してください。" +
+    "ただし、スタッフが伝えようとしている事実そのもの（誰が何をした、体調がどうだったか等）までは書き換えないでください。" +
+    "最も重要な注意点として、原文の文体・語尾・話し言葉っぽさなどの個性はできる限りそのまま残し、必要以上に硬い書き言葉や堅苦しい敬語に書き換えないでください。誤りではない部分（本人の自然な言い回しやテンポ）まで整えて固い文章にしてしまうのは避け、あくまで元の文章らしさを保ったまま、間違っている部分・不適切な部分だけをピンポイントで直してください。" +
+    "また、文章中に絵文字が使われている場合、その絵文字が内容にふさわしい自然な使い方であれば削除せずそのまま残してください（絵文字だからという理由だけで機械的に消さないこと）。ただし内容が不適切だったり、量が多すぎて読みにくくしている場合はその絵文字に限り整理してかまいません。" +
     "説明や前置きは一切不要です。添削後の文章だけを出力してください。\n\n" +
     "文章：" + text;
 
@@ -1432,10 +1493,16 @@ pUserSelect.addEventListener("change", renderParentView);
 
 function renderParentView(){
   // entries はFirestoreのonSnapshotで常に最新の状態に保たれている
-  const user = pUserSelect.value || USERS[0];
-  const list = entries.filter(e=>e.user===user).sort((a,b)=> b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
   const container = document.getElementById("entryList");
   container.innerHTML = "";
+
+  const user = pUserSelect.value;
+  if(!user){
+    container.innerHTML = `<div class="empty-msg">利用者を選択してください</div>`;
+    return;
+  }
+
+  const list = entries.filter(e=>e.user===user).sort((a,b)=> b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
 
   if(list.length===0){
     container.innerHTML = `<div class="empty-msg">まだ記録がありません</div>`;
@@ -1453,11 +1520,13 @@ function renderParentView(){
         <span class="tag">夕食：${e.meal}</span>
         <span class="tag">入浴：${e.bath === "なし" ? "なし" : (e.bathTime || (e.bath ? "未記入" : "未入力"))}</span>
         <span class="tag">服薬：${e.medication || "未入力"}</span>
+        <span class="tag">塗布：${e.topical || "未入力"}</span>
         <span class="tag">担当：${e.staff || "未入力"}</span>
       </div>
       ${e.menu ? `<div class="note-box"><b>夕食の献立</b><br>${escapeHtml(e.menu)}</div>` : ""}
       ${e.mealNote ? `<div class="note-box"><b>食事中の様子</b><br>${escapeHtml(e.mealNote)}</div>` : ""}
       ${e.medication==="あり" ? `<div class="note-box"><b>服薬タイミング</b><br>${e.medTiming && e.medTiming.length ? escapeHtml(e.medTiming.join("、")) : "（未選択）"}</div>` : ""}
+      ${e.topical==="あり" ? `<div class="note-box"><b>塗布タイミング</b><br>${e.topicalTiming && e.topicalTiming.length ? escapeHtml(e.topicalTiming.join("、")) : "（未選択）"}</div>` : ""}
       <div class="note-box"><b>スタッフからひとこと</b><br>${e.note ? escapeHtml(e.note) + "<br><br>" : ""}${escapeHtml(FIXED_NOTE)}</div>
       <div class="entry-btn-row">
         <button class="edit-btn" data-edit="${e.id}">編集</button>
@@ -1538,6 +1607,9 @@ function buildPdfPage1Html(e){
   const medBadges = ["あり","なし"].map(o=>
     `<span class="pdf-badge${o===e.medication ? " active" : ""}">${o}</span>`
   ).join("");
+  const topicalBadges = ["あり","なし"].map(o=>
+    `<span class="pdf-badge${o===e.topical ? " active" : ""}">${o}</span>`
+  ).join("");
 
   return `
     <div class="pdf-header">
@@ -1573,12 +1645,18 @@ function buildPdfPage1Html(e){
       </div>
 
       <div class="pdf-section" style="border-bottom:none; padding-bottom:0;">
-        <div class="pdf-section-title">💊 服薬</div>
+        <div class="pdf-section-title">💊 服薬・塗布</div>
         <div class="pdf-label">服薬</div>
         <div class="pdf-badges">${medBadges}</div>
         ${e.medication==="あり" ? `
-        <div class="pdf-label">タイミング</div>
+        <div class="pdf-label">服薬タイミング</div>
         <div class="pdf-text">${e.medTiming && e.medTiming.length ? escapeHtml(e.medTiming.join("、")) : "（未選択）"}</div>
+        ` : ""}
+        <div class="pdf-label">塗布</div>
+        <div class="pdf-badges">${topicalBadges}</div>
+        ${e.topical==="あり" ? `
+        <div class="pdf-label">塗布タイミング</div>
+        <div class="pdf-text">${e.topicalTiming && e.topicalTiming.length ? escapeHtml(e.topicalTiming.join("、")) : "（未選択）"}</div>
         ` : ""}
       </div>
     </div>
@@ -1723,6 +1801,10 @@ db.collection("meta").doc("users").onSnapshot(doc=>{
   renderUserSelects();
   if(usersFirstLoad){
     document.getElementById("s_user").value = "__cleared__";
+    // 記録一覧の「お名前で絞り込み」も、アプリを開いた直後は白紙にする
+    // （ブラウザが先頭の利用者を自動選択してしまうのを防ぐ）
+    pUserSelect.value = "__cleared__";
+    renderParentView();
     usersFirstLoad = false;
   }
   if(!userManagePanel.classList.contains("hidden")) renderUserManageList();
